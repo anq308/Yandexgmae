@@ -1,0 +1,20 @@
+{
+  "version": "1.4.0",
+  "unitChecks": 18,
+  "browserChecks": 43,
+  "totalAutomatedChecks": 61,
+  "productionSmoke": {
+    "bareStart": true,
+    "weaponChangesSkills": true,
+    "dragEquip": true,
+    "hotbarReload": true,
+    "fishingBites": true,
+    "recipeRequirementsVisible": true,
+    "browserErrors": []
+  },
+  "files": 4,
+  "bytes": 346477,
+  "archiveMatchesDist": true,
+  "debugHookAbsent": true,
+  "zipBytes": 113877
+}

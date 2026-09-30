@@ -1,0 +1,255 @@
+export const dungeons = {
+  crypt: {
+    name: ["Лиственная гробница", "Leafhaven Crypt"],
+    desc: [
+      "Три этажа скелетов и призраков. Костяной король призывает свиту и накрывает зал кольцами смерти.",
+      "Three floors of skeletons and ghosts. The Bone King summons guards and fills the hall with death rings.",
+    ],
+    level: 4,
+    floors: 3,
+    boss: "boneKing",
+    color: "#bda7dc",
+    mobs: ["skeleton", "bat", "revenant"],
+    loot: { warrior: "hammer", ranger: "shadowdaggers", mage: "emberstaff" },
+    armor: "grave",
+    portal: "cryptPortal",
+  },
+  mine: {
+    name: ["Шахты вечного льда", "Everfrost Mines"],
+    desc: [
+      "Три этажа. Ледяной тиран сочетает рывки, веер кристаллов и замораживающие взрывы.",
+      "Three floors. The Frost Tyrant combines charges, crystal fans and freezing blasts.",
+    ],
+    level: 7,
+    floors: 3,
+    boss: "frostTyrant",
+    color: "#9eddef",
+    mobs: ["golem", "skeleton", "shaman"],
+    loot: { warrior: "frostSpear", ranger: "moonbow", mage: "tidestaff" },
+    armor: "frost",
+    portal: "minePortal",
+  },
+  abyss: {
+    name: ["Провал ядовитых корней", "Venomroot Abyss"],
+    desc: [
+      "Четыре этажа. Матка глубин оставляет ядовитые лужи, зовёт пауков и атакует издалека.",
+      "Four floors. The Brood Queen leaves poison pools, summons spiders and attacks from range.",
+    ],
+    level: 10,
+    floors: 4,
+    boss: "broodQueen",
+    color: "#b7d385",
+    mobs: ["spider", "shaman", "revenant"],
+    loot: { warrior: "flameblade", ranger: "venombow", mage: "voidstaff" },
+    armor: "ember",
+    portal: "abyssPortal",
+  },
+  citadel: {
+    name: ["Цитадель расколотого неба", "Shattered Sky Citadel"],
+    desc: [
+      "Четыре этажа. Для входа нужны три печати глубин. Повелитель бури сочетает лучи, молнии и залпы.",
+      "Four floors. Requires three depth seals. The Storm Lord combines beams, lightning and barrages.",
+    ],
+    level: 14,
+    floors: 4,
+    boss: "stormLord",
+    color: "#dbb9fb",
+    mobs: ["sentinel", "revenant", "shaman"],
+    loot: { warrior: "titanblade", ranger: "stormbow", mage: "thunderwand" },
+    armor: "storm",
+    portal: "citadelPortal",
+  },
+};
+export const bossNames = {
+  guardian: ["Древний хранитель", "Ancient Guardian"],
+  titan: ["Каменный титан", "Stone Titan"],
+  boneKing: ["Костяной король", "Bone King"],
+  frostTyrant: ["Ледяной тиран", "Frost Tyrant"],
+  broodQueen: ["Матка глубин", "Brood Queen"],
+  stormLord: ["Повелитель бури", "Storm Lord"],
+};
+export const mobNames = {
+  slime: ["Лесной слизень", "Woodland slime"],
+  golem: ["Каменный голем", "Stone golem"],
+  wisp: ["Блуждающий огонь", "Wisp"],
+  wolf: ["Янтарный волк", "Amber wolf"],
+  sentinel: ["Стрелковый страж", "Ranged sentinel"],
+  bat: ["Пещерная летучая мышь", "Cave bat"],
+  skeleton: ["Костяной лучник", "Skeleton archer"],
+  bandit: ["Разбойник", "Bandit"],
+  spider: ["Ядовитый паук", "Venom spider"],
+  shaman: ["Шаман разлома", "Rift shaman"],
+  revenant: ["Восставший", "Revenant"],
+  ...bossNames,
+};
+export const contracts = [
+  {
+    id: "tailor",
+    name: ["Первый доспех", "First armor"],
+    desc: [
+      "Создайте или купите стёганый жилет у Брама. Для крафта нужны 6 волокон и 2 травы.",
+      "Craft or buy a padded vest at Bram’s. Crafting needs 6 fibers and 2 herbs.",
+    ],
+    kind: "armor",
+    target: "cloth",
+    count: 1,
+    gold: 80,
+    xp: 90,
+    level: 1,
+  },
+  {
+    id: "forestHunt",
+    name: ["Тропы без слизней", "Slime-free trails"],
+    desc: ["Победите 12 слизней.", "Defeat 12 slimes."],
+    kind: "kill",
+    target: "slime",
+    count: 12,
+    gold: 120,
+    xp: 130,
+    level: 1,
+  },
+  {
+    id: "leatherSupply",
+    name: ["Шкуры для каравана", "Hides for the caravan"],
+    desc: ["Передайте 8 кож кузнецу.", "Deliver 8 hides to the smith."],
+    kind: "item",
+    target: "leather",
+    count: 8,
+    gold: 150,
+    xp: 160,
+    level: 2,
+  },
+  {
+    id: "bandits",
+    name: ["Разбойники на востоке", "Eastern bandits"],
+    desc: ["Победите 10 разбойников.", "Defeat 10 bandits."],
+    kind: "kill",
+    target: "bandit",
+    count: 10,
+    gold: 220,
+    xp: 210,
+    level: 4,
+  },
+  {
+    id: "cryptSeal",
+    name: ["Печать костей", "Seal of bones"],
+    desc: [
+      "Пройдите Лиственную гробницу и победите Костяного короля.",
+      "Clear the Crypt and defeat the Bone King.",
+    ],
+    kind: "dungeon",
+    target: "crypt",
+    count: 1,
+    gold: 280,
+    xp: 260,
+    level: 4,
+    points: 1,
+  },
+  {
+    id: "crystalSupply",
+    name: ["Кристаллы для маяка", "Crystals for the beacon"],
+    desc: ["Передайте 8 кристаллов.", "Deliver 8 crystals."],
+    kind: "item",
+    target: "crystal",
+    count: 8,
+    gold: 240,
+    xp: 240,
+    level: 5,
+  },
+  {
+    id: "mineSeal",
+    name: ["Печать ледника", "Seal of frost"],
+    desc: [
+      "Победите Ледяного тирана в шахтах.",
+      "Defeat the Frost Tyrant in the mines.",
+    ],
+    kind: "dungeon",
+    target: "mine",
+    count: 1,
+    gold: 420,
+    xp: 390,
+    level: 7,
+    points: 1,
+  },
+  {
+    id: "nightWatch",
+    name: ["Ночной дозор", "Night watch"],
+    desc: [
+      "Победите 12 врагов ночью под открытым небом.",
+      "Defeat 12 enemies outdoors at night.",
+    ],
+    kind: "night",
+    count: 12,
+    gold: 300,
+    xp: 290,
+    level: 5,
+  },
+  {
+    id: "spiderHunt",
+    name: ["Сжечь паутину", "Burn the webs"],
+    desc: ["Победите 18 ядовитых пауков.", "Defeat 18 venom spiders."],
+    kind: "kill",
+    target: "spider",
+    count: 18,
+    gold: 370,
+    xp: 340,
+    level: 8,
+  },
+  {
+    id: "abyssSeal",
+    name: ["Печать глубин", "Seal of the abyss"],
+    desc: ["Победите Матку глубин.", "Defeat the Brood Queen."],
+    kind: "dungeon",
+    target: "abyss",
+    count: 1,
+    gold: 550,
+    xp: 490,
+    level: 10,
+    points: 1,
+  },
+  {
+    id: "titanHunt",
+    name: ["Охота на титанов", "Titan hunt"],
+    desc: [
+      "Победите обоих каменных титанов долины.",
+      "Defeat both stone titans.",
+    ],
+    kind: "kill",
+    target: "titan",
+    count: 2,
+    gold: 500,
+    xp: 450,
+    level: 8,
+  },
+  {
+    id: "skySeal",
+    name: ["Последняя печать", "The final seal"],
+    desc: [
+      "Победите Повелителя бури в Цитадели.",
+      "Defeat the Storm Lord in the Citadel.",
+    ],
+    kind: "dungeon",
+    target: "citadel",
+    count: 1,
+    gold: 900,
+    xp: 800,
+    level: 14,
+    points: 2,
+  },
+];
+export function contractProgress(save, q) {
+  if (q.kind === "kill") return save.kills[q.target] || 0;
+  if (q.kind === "item") return save.inventory[q.target] || 0;
+  if (q.kind === "armor") return save.ownedArmors.includes(q.target) ? 1 : 0;
+  if (q.kind === "night") return save.nightKills || 0;
+  return save.dungeonClears[q.target] || 0;
+}
+export function dungeonAccess(save, id) {
+  const d = dungeons[id];
+  return (
+    !!d &&
+    save.level >= d.level &&
+    (id !== "citadel" ||
+      ["crypt", "mine", "abyss"].every((key) => save.dungeonClears[key] > 0))
+  );
+}

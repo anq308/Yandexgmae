@@ -1,0 +1,11 @@
+node_modules/
+dist/
+artifacts/*
+!artifacts/elderia-yandex.zip
+!artifacts/production-validation-v14.json
+!artifacts/promo/
+!artifacts/promo/**
+test-results/
+playwright-report/
+*.log
+.DS_Store
