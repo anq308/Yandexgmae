@@ -11,6 +11,7 @@ import {
   contracts,
   contractProgress,
   dungeonAccess,
+  difficulties,
 } from "./content.js";
 import { createDungeon } from "./dungeons.js";
 import { makeEnemy, addHazard, updateHazards } from "./battle.js";
@@ -23,9 +24,12 @@ import {
   payMaterials,
   canPayMaterials,
   weaponUpgradeCost,
-  armorUpgradeCost,
-} from "./equipment.js";
+  armorUpgradeCost, missingRequirements } from "./equipment.js";
 import { tr, label } from "./i18n.js";
+import { dawnWeapons } from "./eclipse.js";
+import { worldBosses, RESPAWN } from "./worldbosses.js";
+import { gearPool } from "./loot.js";
+import { createInterior } from "./interiors.js";
 export function installAdventure(Game) {
   Object.defineProperties(Game.prototype, {
     climate: {
@@ -33,13 +37,14 @@ export function installAdventure(Game) {
         return climateAt(
           this.save,
           this.currentRegion,
-          this.save?.activeDungeon?.id,
+          this.save?.interior ? "interior" : this.save?.activeDungeon?.id,
         );
       },
     },
     zoneId: {
       get() {
         const d = this.save?.activeDungeon;
+        if (this.save?.interior) return "house:" + this.save.interior.id;
         return d ? `${d.id}:${d.runId}:${d.floor}` : "world";
       },
     },
@@ -61,6 +66,17 @@ export function installAdventure(Game) {
         this.overworld = this.world;
         this.overworldTerrain = this.terrain;
       }
+      if (s.interior) {
+        // Indoors: a quiet furnished room without enemies or weather.
+        this.world = createInterior(s.interior.id);
+        this.terrain = createTerrain(this.world);
+        this.enemies = [];
+        this.sparks = [];
+        this.hazards = [];
+        this.potionCooldown = s.potionCooldown || 0;
+        this.currentRegion = "house:" + s.interior.id;
+        return;
+      }
       const state = s.activeDungeon;
       this.world = state ? createDungeon(state) : this.overworld;
       this.terrain = state ? createTerrain(this.world) : this.overworldTerrain;
@@ -69,10 +85,24 @@ export function installAdventure(Game) {
         .filter((e) => !this.defeated.has(e.id))
         .map((e) => {
           const m = makeEnemy(e, undefined, s.level);
+          const diff = state && difficulties[state.difficulty || 0];
+          if (diff && diff.hp > 1) {
+            m.maxHp = m.hp = Math.round(m.maxHp * diff.hp);
+            m.damage = Math.round(m.damage * diff.damage);
+            m.level += diff.level;
+            m.xp = Math.round(m.xp * (1 + diff.loot * 0.6));
+            m.gold = Math.round(m.gold * (1 + diff.loot * 0.6));
+            m.scaled = true;
+          }
           if (state && Number.isFinite(state.enemyHp?.[e.id]))
             m.hp = Math.min(m.maxHp, state.enemyHp[e.id]);
           return m;
         });
+      if (!state) {
+        this.spawnQuestEnemies?.();
+        this.spawnWorldBosses?.();
+        this.worldBossTimer = 5;
+      }
       if (state && this.enemies.every((e) => !e.guard || e.hp <= 0)) {
         this.world.openGate();
         this.terrain.chunks.clear();
@@ -87,8 +117,8 @@ export function installAdventure(Game) {
       this.clockMark = Math.floor(this.climate.elapsed / 12);
       this.currentRegion = state ? state.id : regionAt(s.x, s.y);
     },
-    enterDungeon(id) {
-      if (!dungeonAccess(this.save, id)) {
+    enterDungeon(id, difficulty = 0) {
+      if (!dungeonAccess(this.save, id, difficulty)) {
         this.onToast(
           tr(
             "Недостаточный уровень или не собраны три печати глубин.",
@@ -112,6 +142,7 @@ export function installAdventure(Game) {
         runId: this.save.runSerial,
         returnPoint: { x: portal.x + 24, y: portal.y },
         enemyHp: {},
+        difficulty,
       };
       this.loadZone();
       Object.assign(this.save, this.world.start);
@@ -197,10 +228,13 @@ export function installAdventure(Game) {
       this.dash = null;
       this.selectedTarget = null;
       this.buffs = {};
+      this.allies = [];
+      this.heroAnim = null;
       this.heldAttack = false;
       this.camera = { x: this.save.x, y: this.save.y };
-      this.currentRegion =
-        this.save.activeDungeon?.id || regionAt(this.save.x, this.save.y);
+      this.currentRegion = this.save.interior
+        ? "house:" + this.save.interior.id
+        : this.save.activeDungeon?.id || regionAt(this.save.x, this.save.y);
     },
     sealArena() {
       if (!this.save.activeDungeon) return;
@@ -280,11 +314,16 @@ export function installAdventure(Game) {
             ),
           );
         }
-      } else {
+      } else if (!s.interior) {
         for (const [id, at] of Object.entries(s.respawns))
           if (cl.elapsed >= at) {
             const spawn = enemySpawns.find((e) => e.id === id);
-            if (spawn && Math.hypot(spawn.x - s.x, spawn.y - s.y) > 260) {
+            // Never respawn in sight of the hero or inside a settlement.
+            if (
+              spawn &&
+              Math.hypot(spawn.x - s.x, spawn.y - s.y) > 260 &&
+              !["village", "outpost", "harbor", "frontier"].includes(regionAt(spawn.x, spawn.y))
+            ) {
               const old = this.enemies.find((e) => e.id === id),
                 fresh = makeEnemy(spawn, undefined, s.level);
               if (old) Object.assign(old, fresh);
@@ -342,20 +381,35 @@ export function installAdventure(Game) {
         this.save.dungeonClears[id] = (this.save.dungeonClears[id] || 0) + 1;
         this.save.flags["seal-" + id] = true;
         this.openArena();
+      } else if (e.worldBoss) {
+        const def = worldBosses.find((b) => b.type === e.type),
+          pool = gearPool(this.save, this.save.level + 4).filter(([k]) => k === "weapon");
+        if (pool.length) contents.weapon = pool[Math.floor(this.rng() * pool.length)][1];
+        contents.items.essence = 3 + Math.floor(def.baseLevel / 3);
+        this.save.respawns[e.id] =
+          this.save.playtime + this.save.restTime + RESPAWN;
+        this.save.flags["wb-" + e.type] = true;
+      } else if (e.type === "eclipse") {
+        contents.weapon = dawnWeapons[this.save.characterClass];
+        contents.items.essence = 12;
+        contents.items.crystal = 6;
       } else {
         contents.weapon =
           e.type === "titan"
-            ? { warrior: "scimitar", ranger: "repeater", mage: "moonstaff" }[
+            ? { warrior: "scimitar", ranger: "repeater", mage: "moonstaff", paladin: "justiceHammer", necromancer: "harvestScythe" }[
                 this.save.characterClass
               ]
-            : { warrior: "axe", ranger: "longbow", mage: "earthstaff" }[
+            : { warrior: "axe", ranger: "longbow", mage: "earthstaff", paladin: "morningstar", necromancer: "cryptWand" }[
                 this.save.characterClass
               ];
         contents.armor = e.type === "titan" ? "plate" : "chain";
       }
       contents.items[this.save.characterClass + "Scroll"] = 1;
-      contents.wearable =
-        id === "citadel"
+      contents.wearable = e.worldBoss
+        ? worldBosses.find((b) => b.type === e.type).trophy
+        : e.type === "eclipse"
+          ? "dawnCirclet"
+          : id === "citadel"
           ? "runeHood"
           : id === "abyss"
             ? "ironGreaves"
@@ -363,6 +417,9 @@ export function installAdventure(Game) {
               ? "ironHelm"
               : "leatherBoots";
       for (const m of this.enemies) if (m.owner === e.id) m.hp = 0;
+      const diff = difficulties[state?.difficulty || 0];
+      if (diff.essence > 1) contents.items.essence = Math.round(contents.items.essence * diff.essence);
+      this.bossFountain(e, (e.worldBoss ? 2 : e.type === "eclipse" ? 3 : 1) + diff.loot);
       this.hazards = this.hazards.filter((h) => h.owner !== e.id);
       this.projectiles = this.projectiles.filter((p) => !p.enemy);
       this.save.lootDrops.push({
@@ -372,7 +429,10 @@ export function installAdventure(Game) {
         y: e.y,
         zone: this.zoneId,
         contents,
-        name: ["Трофеи босса", "Boss spoils"],
+        name:
+          e.type === "eclipse"
+            ? ["Реликвии рассвета", "Relics of dawn"]
+            : ["Трофеи босса", "Boss spoils"],
         color: e.color || "#e8d593",
       });
       this.emit("loot", e.x, e.y, "#f4d181", 65);
@@ -455,13 +515,15 @@ export function installAdventure(Game) {
         item.source ||
         this.save[list].includes(id) ||
         this.save.level < (item.level || 1) ||
+        missingRequirements(this.save, item).length ||
         (kind === "weapon" && item.class !== this.save.characterClass)
       )
         return false;
       if (craft) {
         if (!item.recipe || !payMaterials(this.save, item.recipe)) return false;
       } else {
-        if (kind === "armor" && !item.price) return false;
+        // Gear without a price but with a recipe can only be forged.
+        if ((kind === "armor" || item.recipe) && !item.price) return false;
         if (this.save.gold < (item.price || 45)) return false;
         this.save.gold -= item.price || 45;
       }

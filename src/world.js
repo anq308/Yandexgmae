@@ -173,7 +173,7 @@ landmarks.push(
     id: "cryptPortal",
     type: "entrance",
     dungeon: "crypt",
-    ...point(61, 44),
+    ...point(67, 57),
     name: ["Лиственная гробница", "Leafhaven Crypt"],
   },
   {
@@ -237,6 +237,54 @@ landmarks.push(
     style: "mage",
     name: ["Архивист Эйра", "Archivist Eira"],
     ...point(27, 68),
+  },
+  {
+    id: "paladinMentor",
+    type: "trainer",
+    characterClass: "paladin",
+    style: "paladin",
+    name: ["Сестра Аврора", "Sister Aurora"],
+    ...point(33, 60),
+  },
+  {
+    id: "necroMentor",
+    type: "trainer",
+    characterClass: "necromancer",
+    style: "necromancer",
+    name: ["Отшельник Морв", "Morv the Hermit"],
+    ...point(16, 58),
+  },
+  {
+    id: "beastMentor",
+    type: "trainer",
+    characterClass: "summoner",
+    style: "summoner",
+    name: ["Зверолов Брок", "Brock the Beastcaller"],
+    ...point(13, 63),
+  },
+  {
+    id: "druidMentor",
+    type: "trainer",
+    characterClass: "shapeshifter",
+    style: "shapeshifter",
+    name: ["Друидесса Ива", "Iva the Druid"],
+    ...point(35, 65),
+  },
+  {
+    id: "monkMentor",
+    type: "trainer",
+    characterClass: "monk",
+    style: "monk",
+    name: ["Мастер Шэнь", "Master Shen"],
+    ...point(18, 67),
+  },
+  {
+    id: "engineerMentor",
+    type: "trainer",
+    characterClass: "engineer",
+    style: "engineer",
+    name: ["Изобретательница Гретта", "Gretta the Inventor"],
+    ...point(26, 72),
   },
   {
     id: "riverFishing",
@@ -351,6 +399,7 @@ export function createWorld() {
   road(86, 17, 94, 17, 2);
   road(71, 35, 77, 53, 1);
   road(77, 53, 91, 66, 1);
+  road(76, 53, 69, 57, 1);
   road(86, 67, 99, 67, 2);
   road(91, 61, 91, 73, 2);
   road(24, 68, 19, 76, 1);
@@ -620,18 +669,8 @@ export function createWorld() {
         for (let dx = -2; dx <= 1; dx++) blocked[(y + dy) * WIDTH + x + dx] = 1;
     });
   // Decorative details of the settlements and ruins.
-  [
-    [15, 67],
-    [16, 67],
-    [17, 67],
-    [15, 68],
-    [16, 68],
-    [17, 68],
-    [33, 68],
-    [34, 68],
-    [33, 69],
-    [34, 69],
-  ].forEach(([x, y], i) =>
+  // Crops now grow in the fenced farm plots of settlements.js.
+  [].forEach(([x, y], i) =>
     objects.push({
       id: `crop${i}`,
       type: "crop",
@@ -644,12 +683,6 @@ export function createWorld() {
     [14, 59],
     [15, 59],
     [16, 59],
-    [32, 72],
-    [33, 72],
-    [34, 72],
-    [35, 72],
-    [66, 39],
-    [67, 39],
   ].forEach(([x, y], i) =>
     objects.push({ id: `fence${i}`, type: "fence", ...point(x, y) }),
   );
@@ -676,7 +709,6 @@ export function createWorld() {
   [
     [17, 73],
     [19, 73],
-    [68, 41],
   ].forEach(([x, y], i) =>
     objects.push({ id: `sheep${i}`, type: "sheep", ...point(x, y) }),
   );
@@ -720,6 +752,18 @@ export function createWorld() {
     objects,
     width: WIDTH,
     height: HEIGHT,
+    addObject(o) {
+      objects.push(o);
+      const key = `${Math.floor(o.x / bucketSize)},${Math.floor(o.y / bucketSize)}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(o);
+    },
+    removeObject(o) {
+      const i = objects.indexOf(o);
+      if (i >= 0) objects.splice(i, 1);
+      const list = buckets.get(`${Math.floor(o.x / bucketSize)},${Math.floor(o.y / bucketSize)}`);
+      if (list && list.includes(o)) list.splice(list.indexOf(o), 1);
+    },
     getObjectsInRect(x, y, w, h) {
       const result = [];
       for (

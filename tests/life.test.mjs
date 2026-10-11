@@ -12,15 +12,15 @@ import {
 import { makeEnemy } from "../src/battle.js";
 import { wearables, emptyWearables } from "../src/gear.js";
 
-test("all 39 weapons select a class discipline, with 42 independent abilities and five valid slots", () => {
-  assert.equal(Object.keys(abilityCatalog).length, 42);
+test("every weapon selects a class discipline, with 138 independent abilities and five valid slots", () => {
+  assert.equal(Object.keys(abilityCatalog).length, 138);
   for (const [id, w] of Object.entries(weapons)) {
     const s = newSave("Hero", w.class, {}, id);
-    assert.equal(s.equippedWeapon, null);
+    assert.equal(s.equippedWeapon, id);
     assert.equal(s.equippedArmor, "none");
     assert.deepEqual(s.equippedWearables, emptyWearables());
     s.equippedWeapon = id;
-    assert.equal(skillsFor(s).length, 5);
+    assert.ok(skillsFor(s).length >= 8);
     assert.equal(new Set(barFor(s)).size, 5);
     assert.ok(skillsFor(s).every((a) => a.class === w.class));
     assert.ok(validateSave(s));
@@ -29,12 +29,14 @@ test("all 39 weapons select a class discipline, with 42 independent abilities an
   s.equippedWeapon = "daggers";
   assert.equal(weaponDiscipline(s), "blades");
   assert.ok(skillsFor(s).some((a) => a.effect === "stealth"));
+  // Abilities belong to the class: switching to a bow keeps stealth available.
   s.equippedWeapon = "bow";
-  assert.ok(!skillsFor(s).some((a) => a.effect === "stealth"));
+  assert.equal(weaponDiscipline(s), "bow");
+  assert.ok(skillsFor(s).some((a) => a.effect === "stealth"));
 });
 test("equipment bonuses come only from worn pieces, while empty hands have weaker attacks", () => {
   const s = newSave("Hero", "warrior", {}),
-    bare = deriveStats(s, classes.warrior);
+    bare = deriveStats({ ...s, equippedWeapon: null }, classes.warrior);
   s.equippedWeapon = "sword";
   assert.equal(deriveStats(s, classes.warrior).damage, bare.damage * 2);
   s.ownedWearables = Object.keys(wearables);
@@ -70,17 +72,18 @@ test("saved hotbars, independent mastery and activities survive validation; fore
   s.inventory.rod = 1;
   const v = validateSave(JSON.parse(JSON.stringify(s)));
   assert.equal(v.abilityRanks.vanish, 2);
-  assert.equal(v.hotbars.blades[0], "vanish");
+  // Legacy per-weapon bars become the single class bar.
+  assert.deepEqual(Object.keys(v.hotbars), ["main"]);
+  assert.equal(v.hotbars.main[0], "vanish");
   assert.equal(v.activities.catches, 3);
-  assert.equal(
-    validateSave({
-      ...s,
-      hotbars: {
-        blades: ["vanish", "vanish", "shadowstep", "fieldcare", "trailwind"],
-      },
-    }),
-    null,
-  );
+  // A corrupted bar is repaired to the default instead of losing the save.
+  const repaired = validateSave({
+    ...s,
+    hotbars: {
+      blades: ["vanish", "vanish", "shadowstep", "fieldcare", "trailwind"],
+    },
+  });
+  assert.equal(new Set(repaired.hotbars.main).size, 5);
   assert.equal(validateSave({ ...s, abilityRanks: { bulwark: 1 } }), null);
   assert.equal(
     validateSave({

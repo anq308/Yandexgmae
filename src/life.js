@@ -17,88 +17,74 @@ export const trainerIds = {
   warrior: "bladeMentor",
   ranger: "rangerMentor",
   mage: "mageMentor",
+  paladin: "paladinMentor",
+  necromancer: "necroMentor",
+  summoner: "beastMentor",
+  shapeshifter: "druidMentor",
+  monk: "monkMentor",
+  engineer: "engineerMentor",
 };
 export function acquisitionReason(g, id) {
   const s = g.save,
     a = abilityCatalog[id],
     rank = abilityRank(s, id);
-  if (!a) return tr("Неизвестное умение", "Unknown ability");
+  if (!a || a.class !== s.characterClass) return tr("Неизвестное умение", "Unknown ability");
   if (rank >= 3) return tr("Максимальный ранг", "Maximum rank");
   const required = rankLevel(a, rank + 1);
   if (s.level < required)
     return tr(`Нужен уровень ${required} · ваш ${s.level}`, `Requires level ${required} · yours ${s.level}`);
   if (s.skillPoints < 1)
-    return tr("Нужно 1 очко навыка · получите новый уровень", "Requires 1 skill point · gain a level");
-  if (rank > 0) return "";
-  if (
-    a.source === "practice" &&
-    (s.weaponPractice[weaponDiscipline(s)] || 0) < 8
-  )
-    return tr(
-      `Ударов этим оружием ${s.weaponPractice[weaponDiscipline(s)] || 0}/8`,
-      `Weapon hits ${s.weaponPractice[weaponDiscipline(s)] || 0}/8`,
-    );
-  if (a.source === "mentor") {
-    const o = landmarks.find((o) => o.id === trainerIds[s.characterClass]);
-    if (s.activeDungeon || Math.hypot(s.x - o.x, s.y - o.y) > 85)
-      return tr(
-        "Нужен наставник вашего класса в деревне",
-        "Visit your class mentor in the village",
-      );
-    if (s.gold < 60)
-      return tr("Обучение стоит 60 монет", "Training costs 60 coins");
-  }
-  if (a.source === "tome" && !s.inventory[s.characterClass + "Scroll"])
-    return tr(
-      "Нужен манускрипт класса: тайники, данжи или рыбалка",
-      "Requires a class manuscript: chests, dungeons or fishing",
-    );
-  if (a.source === "quest" && !s.flags[a.quest])
-    return tr(
-      "Сначала выполните указанное в описании задание",
-      "Complete the quest in its description first",
-    );
-  if (a.source === "ritual") {
-    if (
-      s.activeDungeon ||
-      !landmarks.some(
-        (o) => o.type === "camp" && Math.hypot(o.x - s.x, o.y - s.y) < 65,
-      )
-    )
-      return tr("Ритуал доступен у костра", "Ritual requires a campfire");
-    if (!canPayMaterials(s, { crystal: 3, essence: 1 }))
-      return tr(
-        "Нужны 3 кристалла и 1 эссенция",
-        "Requires 3 crystals and 1 essence",
-      );
-  }
+    return tr("Нужно 1 очко навыка · получите уровень или прочтите манускрипт", "Requires 1 skill point · level up or read a manuscript");
   return "";
 }
+export const RESPEC_COST = 100;
 export function installLife(Game) {
   Object.assign(Game.prototype, {
     acquisitionReason(id) {
       return acquisitionReason(this, id);
     },
-    learnSkill(index) {
-      const a = skillsFor(this.save)[index];
+    // Accepts an ability id (or a book index for older callers).
+    learnSkill(ref) {
+      const a = typeof ref === "string" ? abilityCatalog[ref] : skillsFor(this.save)[ref];
       if (!a) return false;
       const reason = acquisitionReason(this, a.id);
       if (reason) {
         this.onToast(reason);
         return false;
       }
-      const rank = abilityRank(this.save, a.id);
-      if (!rank) {
-        if (a.source === "mentor") this.save.gold -= 60;
-        if (a.source === "tome")
-          this.save.inventory[this.save.characterClass + "Scroll"]--;
-        if (a.source === "ritual")
-          payMaterials(this.save, { crystal: 3, essence: 1 });
-      }
-      const slot = barFor(this.save).indexOf(a.id);
-      if (!upgradeSkill(this.save, slot)) return false;
+      if (!upgradeSkill(this.save, a.id)) return false;
       this.audio.effect("level");
-      this.onToast(tr("Умение улучшено. Очко потрачено один раз.", "Ability improved. One point spent."));
+      this.onToast(
+        abilityRank(this.save, a.id) === 1
+          ? tr("Умение изучено. Назначьте его на панель в книге умений.", "Ability learned. Put it on your bar in the skill book.")
+          : tr("Умение усилено.", "Ability upgraded."),
+      );
+      this.persist();
+      this.onChange();
+      return true;
+    },
+    readManuscript() {
+      const key = this.save.characterClass + "Scroll";
+      if (!this.save.inventory[key]) return false;
+      this.save.inventory[key]--;
+      this.save.skillPoints++;
+      this.audio.effect("level");
+      this.onToast(tr("Манускрипт прочитан: +1 очко навыка.", "Manuscript read: +1 skill point."));
+      this.persist();
+      this.onChange();
+      return true;
+    },
+    // Mentors return every spent point for a fee.
+    respecSkills() {
+      const s = this.save,
+        spent = Object.values(s.abilityRanks).reduce((n, r) => n + r, 0),
+        o = landmarks.find((o) => o.id === trainerIds[s.characterClass]);
+      if (!spent || s.gold < RESPEC_COST || s.activeDungeon || Math.hypot(s.x - o.x, s.y - o.y) > 90) return false;
+      s.gold -= RESPEC_COST;
+      s.skillPoints += spent;
+      s.abilityRanks = {};
+      this.abilityCooldowns = {};
+      this.syncSkillCooldowns();
       this.persist();
       this.onChange();
       return true;
@@ -107,11 +93,11 @@ export function installLife(Game) {
       const valid = skillsFor(this.save).some((a) => a.id === id);
       if (!valid || !Number.isInteger(slot) || slot < 0 || slot > 4)
         return false;
-      const p = weaponDiscipline(this.save),
-        bar = [...barFor(this.save)],
+      const bar = [...barFor(this.save)],
         other = bar.indexOf(id);
-      [bar[slot], bar[other]] = [bar[other], bar[slot]];
-      this.save.hotbars[p] = bar;
+      if (other >= 0) [bar[slot], bar[other]] = [bar[other], bar[slot]];
+      else bar[slot] = id;
+      this.save.hotbars = { main: bar };
       this.syncSkillCooldowns();
       this.persist();
       this.onChange();
@@ -142,7 +128,6 @@ export function installLife(Game) {
     removeGear(slot) {
       if (slot === "mainhand") {
         this.save.equippedWeapon = null;
-        this.save.skillRanks = [0, 0, 0];
         this.syncSkillCooldowns();
       } else if (slot === "chest") this.equipArmor("none");
       else if (slot in this.save.equippedWearables)
@@ -159,13 +144,14 @@ export function installLife(Game) {
         s = this.save;
       if (
         !a ||
+        a.source ||
         s.ownedWearables.includes(id) ||
         s.level < a.level ||
         (a.class && a.class !== s.characterClass)
       )
         return false;
       if (craft) {
-        if (!payMaterials(s, a.recipe)) return false;
+        if (!a.recipe || !payMaterials(s, a.recipe)) return false;
       } else {
         if (!a.price || s.gold < a.price) return false;
         s.gold -= a.price;
@@ -331,6 +317,7 @@ export function installLife(Game) {
         if (
           e.hp <= 0 ||
           e.engaged ||
+          e.scaled ||
           Math.hypot(e.x - this.save.x, e.y - this.save.y) < 360
         )
           continue;

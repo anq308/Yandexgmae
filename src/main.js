@@ -5,15 +5,21 @@ import {
   abilityRank,
   weaponDiscipline,
   disciplines,
+  schoolOf,
+  rankConfig,
+  rankPerks,
+  abilityCatalog,
+  utilitySkills,
 } from "./abilities.js";
+import { RESPEC_COST, trainerIds } from "./life.js";
 import { wearables, slotNames, recipes } from "./gear.js";
 import {
+  canPayMaterials,
   armors,
   equippedArmor,
   starterWeapons,
   weaponUpgradeCost,
-  armorUpgradeCost,
-} from "./equipment.js";
+  armorUpgradeCost, missingRequirements, mythicRequirementNames } from "./equipment.js";
 import {
   dungeons,
   bossNames,
@@ -21,9 +27,13 @@ import {
   contracts,
   contractProgress,
   dungeonAccess,
+  difficulties,
 } from "./content.js";
-import { weatherNames, weatherDescription } from "./climate.js";
+import { weatherNames, weatherDescription, seasonNames, seasonDescription } from "./climate.js";
+import "@fontsource/tiny5/400.css";
+import "@fontsource/press-start-2p/400.css";
 import "./style.css";
+import "./theme.css";
 import {
   tr,
   classes,
@@ -42,14 +52,30 @@ import {
   deriveStats,
   skillTrees,
   skillConfig,
+  critChance,
+  elementNames,
 } from "./equipment.js";
+import { shardCount, heralds } from "./eclipse.js";
+import { storyOf, scenes, sceneOpen, sceneChoices, choiceTag, sceneText, fateLines, storyLog, storyRumors, villagerMood } from "./story.js";
+import { worldBosses } from "./worldbosses.js";
+import { races } from "./races.js";
+import { drawTitleScene } from "./title.js";
+import {
+  interiorDefs,
+  sellPrices,
+  buyPrices,
+  tavernMenu,
+  ROOM_PRICE,
+  gearSellPrice,
+} from "./interiors.js";
+import { worldOverview, fogOverlay, isDiscovered, drawMapIcon, labelPlacer } from "./mapview.js";
 import {
   keyLabel,
   saveControls,
   normalizeControls,
   defaultBindings,
 } from "./controls.js";
-import { drawHero } from "./art.js";
+import { drawHero, armorTier } from "./art.js";
 import { Game } from "./game.js";
 import { Platform } from "./platform.js";
 import { GameAudio } from "./audio.js";
@@ -61,6 +87,7 @@ import {
   objectiveTarget,
   canActivate,
   countGathered,
+  allSeals,
 } from "./quests.js";
 
 const app = document.querySelector("#app");
@@ -75,6 +102,7 @@ let state = "menu",
   modal = null,
   existingSave = null,
   selectedClass = "warrior",
+  selectedRace = "human",
   selectedWeapon = "sword",
   appearance = { skin: "#e9b88a", hair: "#654333", cape: null },
   toastTimer = 0,
@@ -131,6 +159,18 @@ function toast(text) {
 function titleBar(back = false) {
   return `<header class="menu-header">${brand()}<div class="header-actions">${back ? `<button class="text-button" data-action="menu">← ${tr("Назад", "Back")}</button>` : ""}<button class="icon-button" data-action="sound" aria-label="${tr("Включить или отключить звук", "Toggle audio")}">${icon(audio.enabled ? "sound" : "mute")}</button><button class="language-button" data-action="language">${language.toUpperCase()}</button></div></header>`;
 }
+let sceneLoop = 0;
+// Runs the animated title / creation backdrop while those screens are open.
+function runScene(id, draw) {
+  cancelAnimationFrame(sceneLoop);
+  const tick = (now) => {
+    const canvas = document.getElementById(id);
+    if (!canvas || state === "game") return;
+    draw(canvas, now / 1000);
+    sceneLoop = requestAnimationFrame(tick);
+  };
+  sceneLoop = requestAnimationFrame(tick);
+}
 function showMenu() {
   state = "menu";
   modal = null;
@@ -138,73 +178,127 @@ function showMenu() {
   hud.hidden = true;
   screen.hidden = false;
   app.classList.remove("playing", "creating");
+  app.classList.add("titled");
   syncPause();
-  screen.innerHTML = `<div class="menu-screen">${titleBar()}<section class="menu-hero"><div class="hero-kicker"><span></span>${tr("ВАША ИСТОРИЯ НАЧИНАЕТСЯ ЗДЕСЬ", "YOUR STORY BEGINS HERE")}</div><h1>${tr("В каждой долине<br>есть своя <em>легенда.</em>", "Every valley<br>holds a <em>legend.</em>")}</h1><p>${tr("За шелестом листвы скрывается целый мир.<br>Создайте героя. Найдите свой путь. Разбудите Эльдерию.", "A whole world waits beyond the whispering leaves.<br>Create a hero. Find your path. Awaken Elderia.")}</p><div class="menu-buttons">${existingSave ? btn(tr("Продолжить путешествие", "Continue adventure"), "continue", "primary", "play") : btn(tr("Начать путешествие", "Begin your adventure"), "create", "primary", "arrow")}${existingSave ? btn(tr("Новый герой", "New hero"), "create", "secondary") : btn(tr("Как играть", "How to play"), "help", "secondary", "book")}</div>${existingSave ? `<div class="save-caption"><span class="status-dot"></span>${escapeHTML(existingSave.name)} · ${label(classes[existingSave.characterClass].name)} · ${tr("Уровень", "Level")} ${existingSave.level}</div>` : ""}<div class="hero-tags"><span>${icon("map")}${tr("Открытый мир", "Open world")}</span><span>${icon("sword")}${tr("3 класса", "3 classes")}</span><span>${icon("spark")}${tr("Ваша история", "Your story")}</span></div></section><div class="scene-caption"><span>01 / 04</span><i></i><div>${tr("Лиственная деревня", "Leafhaven Village")}<small>${tr("Там, где начинается путь", "Where the journey begins")}</small></div></div><footer class="menu-footer"><span>${tr("ПИКСЕЛЬНЫЙ МИР. БОЛЬШОЕ ПРИКЛЮЧЕНИЕ.", "A PIXEL WORLD. A GRAND ADVENTURE.")}</span><button data-action="help" class="text-button">${icon("book")}${tr("Справочник путешественника", "Traveler’s guide")}</button><span>v1.3 · ${tr("Сохранения включены", "Autosave enabled")}</span></footer></div>`;
+  const hero = existingSave
+    ? { characterClass: existingSave.characterClass, appearance: existingSave.appearance, race: existingSave.race, weapon: existingSave.equippedWeapon || existingSave.ownedWeapons[0], armor: existingSave.equippedArmor === "none" ? "chain" : existingSave.equippedArmor }
+    : { characterClass: "warrior", weapon: "sword", armor: "chain" };
+  screen.innerHTML = `<div class="title-screen"><canvas id="title-scene" aria-hidden="true"></canvas><div class="title-corner"><button class="icon-button" data-action="sound" aria-label="${tr("Включить или отключить звук", "Toggle audio")}">${icon(audio.enabled ? "sound" : "mute")}</button><button class="language-button" data-action="language">${language.toUpperCase()}</button></div><div class="title-ui"><div class="title-logo">${icon("crystal")}<div class="logo-word">${tr("ЭЛЬДЕРИЯ", "ELDERIA")}</div><div class="logo-sub">${tr("ХРОНИКИ ЗАБЫТОЙ ДОЛИНЫ", "CHRONICLES OF THE FORGOTTEN VALLEY")}</div></div><h1 class="title-tagline">${tr("В каждой долине есть своя <em>легенда.</em>", "Every valley holds a <em>legend.</em>")}</h1><nav class="title-menu">${existingSave ? btn(tr("Продолжить путешествие", "Continue adventure"), "continue", "primary", "play") : btn(tr("Начать путешествие", "Begin your adventure"), "create", "primary", "arrow")}${existingSave ? btn(tr("Новый герой", "New hero"), "create", "secondary", "plus") : ""}${btn(tr("Справочник путешественника", "Traveler’s guide"), "help", "secondary", "book")}</nav>${existingSave ? `<div class="save-caption">${escapeHTML(existingSave.name)} · ${label((races[existingSave.race] || races.human).name)} · ${label(classes[existingSave.characterClass].name)} · ${tr("Уровень", "Level")} ${existingSave.level}</div>` : ""}</div><footer class="title-footer"><span>${tr("Пиксельная action RPG", "A pixel action RPG")} · ${Object.keys(classes).length} ${tr("классов", "classes")} · ${Object.keys(races).length} ${tr("рас", "races")}</span><span>v2.8 · ${tr("Сохранения включены", "Autosave enabled")}</span></footer></div>`;
+  runScene("title-scene", (canvas, t) => drawTitleScene(canvas, t, hero));
+}
+// Character creation: race column, animated hero at a campfire, class column.
+function statBar(name, value, max, ic) {
+  return `<div class="stat-bar">${icon(ic)}<span>${name}</span><i><b style="width:${Math.min(100, (value / max) * 100)}%"></b></i><strong>${value}</strong></div>`;
 }
 function showCreation() {
   state = "create";
   hud.hidden = true;
   screen.hidden = false;
   app.classList.add("creating");
-  app.classList.remove("playing");
+  app.classList.remove("playing", "titled");
   syncPause();
   const c = classes[selectedClass],
-    startingSkill = skillsFor({
-      characterClass: selectedClass,
-      equippedWeapon: selectedWeapon,
-    })[0];
-  screen.innerHTML = `<div class="creation-screen">${titleBar(true)}<div class="creation-heading">${badge(tr("ГЛАВА I · НОВОЕ НАЧАЛО", "CHAPTER I · A NEW BEGINNING"))}<h1>${tr("Каким будет ваш <em>герой?</em>", "Who will your <em>hero be?</em>")}</h1><p>${tr("У каждого пути — своя сила. Выберите тот, что ближе вам.", "Every path has its own strength. Choose the one that speaks to you.")}</p></div><section class="character-layout"><div class="character-preview"><div class="preview-top"><span>${tr("ВАШ ПЕРСОНАЖ", "YOUR CHARACTER")}</span><span>01 <i> / 03</i></span></div><div class="portrait-stage"><div class="portrait-glow"></div><div class="portrait-ring"></div><canvas id="hero-preview" width="160" height="150"></canvas><div class="portrait-ground"></div><span class="portrait-spark s1">✧</span><span class="portrait-spark s2">✧</span></div><div class="character-caption"><h2>${label(c.name)}</h2><p>${label(c.tagline)}</p></div><div class="appearance-options"><div><span>${tr("Кожа", "Skin")}</span><div class="swatches">${skins.map((col) => `<button class="swatch ${appearance.skin === col ? "active" : ""}" style="--swatch:${col}" data-color="skin" data-value="${col}" aria-label="${tr("Цвет кожи", "Skin color")} ${col}"></button>`).join("")}</div></div><div><span>${tr("Волосы", "Hair")}</span><div class="swatches">${hairs.map((col) => `<button class="swatch ${appearance.hair === col ? "active" : ""}" style="--swatch:${col}" data-color="hair" data-value="${col}" aria-label="${tr("Цвет волос", "Hair color")} ${col}"></button>`).join("")}</div></div></div><div class="preview-note">${icon("spark")}${tr("Маленький герой. Большая судьба.", "A little hero. A grand destiny.")}</div></div><div class="character-setup"><label class="input-label" for="hero-name">${tr("ИМЯ ВАШЕГО ГЕРОЯ", "YOUR HERO’S NAME")}</label><div class="name-input"><input id="hero-name" placeholder="${tr("Например, Элиан", "For example, Elian")}" maxlength="20" autocomplete="off" value="${escapeHTML(draftName)}">${icon("leaf")}</div><div class="section-label"><span>${tr("ВЫБЕРИТЕ КЛАСС", "CHOOSE YOUR CLASS")}</span><span>${tr("3 пути на выбор", "3 paths to choose")}</span></div><div class="class-list">${Object.entries(
-    classes,
-  )
-    .map(
-      ([key, c]) =>
-        `<button class="class-card ${selectedClass === key ? "selected" : ""}" data-class="${key}" aria-pressed="${selectedClass === key}" style="--class-color:${c.color}"><div class="class-icon">${icon(c.icon)}</div><div><h3>${label(c.name)}</h3><p>${label(c.tagline)}</p></div><span class="class-select">${selectedClass === key ? icon("check") : ""}</span></button>`,
-    )
-    .join(
-      "",
-    )}</div><div class="starter-weapons"><span class="input-label">${tr("СТАРТОВОЕ ОРУЖИЕ", "STARTING WEAPON")}</span><div>${starterWeapons(
-    selectedClass,
-  )
-    .map(
-      ([id, w]) =>
-        `<button data-start-weapon="${id}" class="starter-weapon ${id === selectedWeapon ? "selected" : ""}" aria-pressed="${id === selectedWeapon}">${icon(w.icon)}<span>${label(w.name)}</span></button>`,
-    )
-    .join(
-      "",
-    )}</div><p>${label(weapons[selectedWeapon].desc)} · ${tr("Оружие будет в рюкзаке; герой начинает без одежды.", "The weapon starts in your backpack; your hero has no clothing.")}</p></div><div class="class-description"><p>${label(c.desc)}</p><div class="stats-grid"><div>${icon("heart")}<span>${tr("Здоровье", "Health")}</span><strong>${c.hp}</strong></div><div>${icon("sword")}<span>${tr("Урон", "Damage")}</span><strong>${Math.round(c.damage * weapons[selectedWeapon].multiplier)}</strong></div><div>${icon("spark")}<span>${tr("Энергия", "Energy")}</span><strong>${c.mana}</strong></div></div><div class="class-skill">${icon("spark")}<div><span>${tr("ОСОБАЯ СПОСОБНОСТЬ", "SPECIAL ABILITY")}</span><strong>${label(startingSkill.name)}</strong><p>${label(startingSkill.desc)}</p></div></div></div><div class="creation-start">${btn(tr("Отправиться в путь", "Set out on your journey"), "start", "primary", "arrow")}<span>${icon("shield")}${tr("Прогресс сохраняется автоматически", "Your progress is saved automatically")}</span></div></div></section><footer class="creation-footer"><span>✧ ${tr("Не нужно быть великим, чтобы начать.", "You don’t have to be great to begin.")}</span><span>${tr("Впереди целый мир.", "A whole world lies ahead.")}</span></footer></div>`;
-  const cv = document.querySelector("#hero-preview"),
-    ctx = cv.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  drawHero(ctx, 80, 124, selectedClass, {
-    player: true,
-    armor: "none",
-    weapon: null,
-    ...appearance,
-    scale: ["spear", "staff", "frostStaff", "wand"].includes(selectedWeapon)
-      ? 2.6
-      : 3,
-    weapon: null,
-    armor: "none",
+    race = races[selectedRace],
+    startingSkill =
+      abilityCatalog[
+        disciplines[
+          weaponDiscipline({
+            characterClass: selectedClass,
+            equippedWeapon: selectedWeapon,
+          })
+        ].ids[0]
+      ];
+  const preview = deriveStats(
+    { ...newSave("x", selectedClass, {}, selectedWeapon, selectedRace), equippedWeapon: selectedWeapon },
+    c,
+  );
+  screen.innerHTML = `<div class="creation-screen">${titleBar(true)}<div class="creation-heading">${badge(tr("ГЛАВА I · НОВОЕ НАЧАЛО", "CHAPTER I · A NEW BEGINNING"))}<h1>${tr("Каким будет ваш <em>герой?</em>", "Who will your <em>hero be?</em>")}</h1></div>
+  <section class="creation-grid">
+    <div class="creation-col races-col"><h2 class="col-title">${tr("Раса", "Race")}</h2><div class="race-list">${Object.entries(races)
+      .map(
+        ([key, r]) =>
+          `<button class="race-card ${selectedRace === key ? "selected" : ""}" data-race="${key}" aria-pressed="${selectedRace === key}"><b>${label(r.name)}</b><ul>${r.perks.map((p) => `<li>${label(p)}</li>`).join("")}</ul></button>`,
+      )
+      .join("")}</div><p class="race-desc">${label(race.desc)}</p></div>
+    <div class="creation-col stage-col"><div class="hero-stage"><canvas id="hero-preview" width="200" height="190"></canvas><div class="stage-name"><b>${label(race.name)} · ${label(c.name)}</b><small>${label(c.tagline)}</small></div></div>
+      <label class="input-label" for="hero-name">${tr("ИМЯ ГЕРОЯ", "HERO NAME")}</label><div class="name-input"><input id="hero-name" placeholder="${tr("Например, Элиан", "For example, Elian")}" maxlength="20" autocomplete="off" value="${escapeHTML(draftName)}">${icon("leaf")}</div>
+      <div class="appearance-options"><div><span>${tr("Кожа", "Skin")}</span><div class="swatches">${race.skins.map((col) => `<button class="swatch ${appearance.skin === col ? "active" : ""}" style="--swatch:${col}" data-color="skin" data-value="${col}" aria-label="${tr("Цвет кожи", "Skin color")} ${col}"></button>`).join("")}</div></div><div><span>${tr("Волосы", "Hair")}</span><div class="swatches">${hairs.map((col) => `<button class="swatch ${appearance.hair === col ? "active" : ""}" style="--swatch:${col}" data-color="hair" data-value="${col}" aria-label="${tr("Цвет волос", "Hair color")} ${col}"></button>`).join("")}</div></div></div>
+      <div class="creation-start">${btn(tr("Отправиться в путь", "Set out on your journey"), "start", "primary", "arrow")}<span>${icon("shield")}${tr("Прогресс сохраняется автоматически", "Your progress is saved automatically")}</span></div></div>
+    <div class="creation-col class-col"><h2 class="col-title">${tr("Класс", "Class")}</h2><div class="class-list">${Object.entries(classes)
+      .map(
+        ([key, k]) =>
+          `<button class="class-card ${selectedClass === key ? "selected" : ""}" data-class="${key}" aria-pressed="${selectedClass === key}"><canvas class="class-portrait" data-portrait="${key}" width="40" height="44"></canvas><b>${label(k.name)}</b></button>`,
+      )
+      .join("")}</div>
+      <p class="class-desc">${label(c.desc)}</p>
+      <div class="stat-bars">${statBar(tr("Здоровье", "Health"), preview.maxHp, 190, "heart")}${statBar(tr("Энергия", "Energy"), preview.maxMana, 160, "spark")}${statBar(tr("Урон", "Damage"), preview.damage, 40, "sword")}${statBar(tr("Скорость", "Speed"), Math.round(preview.speed), 140, "boot")}</div>
+      <span class="input-label">${tr("СТАРТОВОЕ ОРУЖИЕ", "STARTING WEAPON")}</span><div class="starter-weapons">${starterWeapons(selectedClass)
+        .map(([id, w]) => `<button data-start-weapon="${id}" class="starter-weapon ${id === selectedWeapon ? "selected" : ""}" aria-pressed="${id === selectedWeapon}">${icon(w.icon)}<span>${label(w.name)}</span></button>`)
+        .join("")}</div><p class="weapon-note">${label(weapons[selectedWeapon].desc)}</p>
+      <div class="class-skill">${icon(startingSkill.icon)}<div><span>${tr("ПЕРВОЕ УМЕНИЕ", "FIRST ABILITY")}</span><strong>${label(startingSkill.name)}</strong><p>${label(startingSkill.desc)}</p></div></div></div>
+  </section></div>`;
+  for (const cv of document.querySelectorAll("[data-portrait]")) {
+    const ctx = cv.getContext("2d"),
+      cls = cv.dataset.portrait;
+    ctx.imageSmoothingEnabled = false;
+    drawHero(ctx, 20, 42, cls, { scale: 0.95, weapon: defaultWeapon(cls), armor: "leather" });
+  }
+  // The preview hero idles by a campfire and swings the chosen weapon now and then.
+  runScene("hero-preview", (cv, t) => {
+    const ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const g = ctx.createRadialGradient(100, 175, 10, 100, 160, 120);
+    g.addColorStop(0, "#5a3218");
+    g.addColorStop(1, "#120d0a");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 200, 190);
+    const flick = Math.sin(t * 12) * 2;
+    ctx.fillStyle = `rgba(255,150,60,${0.12 + Math.sin(t * 9) * 0.03})`;
+    ctx.beginPath();
+    ctx.ellipse(100, 170, 90, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e8702a";
+    ctx.fillRect(160, 160 - flick, 10, 12 + flick);
+    ctx.fillStyle = "#ffd06a";
+    ctx.fillRect(163, 156 - flick, 4, 14 + flick);
+    for (let i = 0; i < 6; i++) {
+      const life = (t * 0.6 + i / 6) % 1;
+      ctx.fillStyle = `rgba(255,190,90,${1 - life})`;
+      ctx.fillRect(164 + Math.sin(t * 3 + i) * 5, 156 - life * 60, 2, 2);
+    }
+    const swing = (t % 3.2) < 0.35 ? (t % 3.2) : 0;
+    drawHero(ctx, 92, 172, selectedClass, {
+      race: selectedRace,
+      player: true,
+      ...appearance,
+      weapon: selectedWeapon,
+      armor: "none",
+      scale: 3.2,
+      time: t,
+      swing,
+      facing: Math.PI / 2,
+    });
   });
 }
 function renderHUD() {
   previousQuestHTML = "";
   lastMapDraw = -Infinity;
   const s = game.save;
-  hud.innerHTML = `<header class="game-header">${brand()}<nav><button class="nav-button" data-action="map">${icon("map")}<span>${tr("Карта", "Map")}</span><kbd>M</kbd></button><button class="nav-button" data-action="journal">${icon("book")}<span>${tr("Задания", "Quests")}</span><kbd>J</kbd></button><button class="nav-button" data-action="inventory">${icon("bag")}<span>${tr("Рюкзак", "Bag")}</span><kbd>I</kbd></button><button class="nav-button" data-action="skills">${icon("spark")}<span>${tr("Умения", "Skills")}</span><kbd>K</kbd><b class="skill-point-indicator" id="skill-points-dot"></b></button><i></i><button class="icon-button" data-action="sound" aria-label="${tr("Звук", "Sound")}">${icon(audio.enabled ? "sound" : "mute")}</button><button class="icon-button" data-action="pause" aria-label="${tr("Пауза", "Pause")}">${icon("pause")}</button></nav></header><div class="player-card"><div class="player-avatar"><canvas id="hud-avatar" width="52" height="55"></canvas><span id="level-label">${s.level}</span></div><div class="player-bars"><div class="player-name"><b>${escapeHTML(s.name)}</b><span id="class-label">${label(classes[s.characterClass].name)}</span></div><div class="resource-row hp">${icon("heart")}<div class="resource-bar"><i id="hp-fill"></i></div><span id="hp-value"></span></div><div class="resource-row mana">${icon("spark")}<div class="resource-bar"><i id="mana-fill"></i></div><span id="mana-value"></span></div><div class="xp-bar"><i id="xp-fill"></i></div></div></div><div class="location-badge">${icon("leaf")}<span id="location-name"></span><i></i>${icon("sun")}<span id="time-label"></span></div><aside class="quest-tracker"><div class="tracker-heading">${icon("flag")}<span>${tr("ВАШЕ ПРИКЛЮЧЕНИЕ", "YOUR ADVENTURE")}</span><button class="icon-button tiny" data-action="journal" aria-label="${tr("Открыть задания", "Open quests")}">${icon("arrow")}</button></div><h3 id="quest-title"></h3><div id="quest-steps"></div><div class="quest-direction" id="quest-direction"></div></aside><button class="minimap-box" data-action="map" aria-label="${tr("Открыть карту", "Open map")}"><canvas id="minimap" width="168" height="132"></canvas><span>${icon("map")}${tr("КАРТА ДОЛИНЫ", "VALLEY MAP")}<kbd>M</kbd></span></button><button class="weather-badge" data-action="weather" id="weather-badge"></button><div class="boss-health" id="boss-health" hidden></div><div class="dungeon-status" id="dungeon-status" hidden></div><div class="buff-display" id="buff-display"></div><div class="enemy-focus" id="enemy-focus" hidden></div><div class="bottom-left"><div class="gold-count">${icon("coin")}<b id="gold-value"></b><span>${tr("монет", "coins")}</span></div><div class="save-status"><span class="status-dot"></span>${tr("Автосохранение", "Autosave")}</div></div><div class="action-bar"><button class="action-slot" data-action="attack">${icon(equippedWeapon(s).icon)}<span>${tr("Атака", "Attack")}</span><kbd>SPACE</kbd></button>${[
+  hud.innerHTML = `<header class="game-header">${brand()}<nav><button class="nav-button" data-action="map">${icon("map")}<span>${tr("Карта", "Map")}</span><kbd>M</kbd></button><button class="nav-button" data-action="journal">${icon("book")}<span>${tr("Задания", "Quests")}</span><kbd>J</kbd></button><button class="nav-button" data-action="inventory">${icon("bag")}<span>${tr("Рюкзак", "Bag")}</span><kbd>I</kbd></button><button class="nav-button" data-action="skills">${icon("spark")}<span>${tr("Умения", "Skills")}</span><kbd>K</kbd><b class="skill-point-indicator" id="skill-points-dot"></b></button><i></i><button class="icon-button" data-action="sound" aria-label="${tr("Звук", "Sound")}">${icon(audio.enabled ? "sound" : "mute")}</button><button class="icon-button" data-action="pause" aria-label="${tr("Пауза", "Pause")}">${icon("pause")}</button></nav></header><div class="player-card"><div class="player-avatar"><canvas id="hud-avatar" width="52" height="55"></canvas><span id="level-label">${s.level}</span></div><div class="player-bars"><div class="player-name"><b>${escapeHTML(s.name)}</b><span id="class-label">${label(races[s.race]?.name || races.human.name)} · ${label(classes[s.characterClass].name)}</span></div><div class="resource-row hp">${icon("heart")}<div class="resource-bar"><i id="hp-fill"></i></div><span id="hp-value"></span></div><div class="resource-row mana">${icon("spark")}<div class="resource-bar"><i id="mana-fill"></i></div><span id="mana-value"></span></div><div class="xp-bar"><i id="xp-fill"></i></div><div class="xp-text" id="xp-text"></div></div></div><div class="location-badge">${icon("leaf")}<span id="location-name"></span><i></i>${icon("sun")}<span id="time-label"></span></div><aside class="quest-tracker"><div class="tracker-heading">${icon("flag")}<span>${tr("ВАШЕ ПРИКЛЮЧЕНИЕ", "YOUR ADVENTURE")}</span><button class="icon-button tiny" data-action="journal" aria-label="${tr("Открыть задания", "Open quests")}">${icon("arrow")}</button></div><h3 id="quest-title"></h3><div id="quest-steps"></div><div class="quest-direction" id="quest-direction"></div></aside><button class="minimap-box" data-action="map" aria-label="${tr("Открыть карту", "Open map")}"><canvas id="minimap" width="168" height="132"></canvas><span>${icon("map")}${tr("КАРТА ДОЛИНЫ", "VALLEY MAP")}<kbd>M</kbd></span></button><button class="weather-badge" data-action="weather" id="weather-badge"></button><div class="boss-health" id="boss-health" hidden></div><div class="dungeon-status" id="dungeon-status" hidden></div><div class="buff-display" id="buff-display"></div><div class="enemy-focus" id="enemy-focus" hidden></div><div class="bottom-left"><div class="gold-count">${icon("coin")}<b id="gold-value"></b><span>${tr("монет", "coins")}</span></div><div class="save-status"><span class="status-dot"></span>${tr("Автосохранение", "Autosave")}</div></div><div class="action-bar"><div class="hud-globe hp"><div class="globe-frame"><i class="globe-fill" id="hp-globe"></i><i class="globe-shine"></i></div><span id="hp-globe-text"></span></div><button class="action-slot" data-action="attack">${icon(equippedWeapon(s).icon)}<span>${tr("Атака", "Attack")}</span><kbd>SPACE</kbd></button>${[
     0, 1, 2, 3, 4,
   ]
     .map((i) => {
       const cfg = skillConfig(s, i);
-      return `<button class="action-slot ${i === 0 ? "skill-slot" : "extra-skill"}" data-action="${i === 0 ? "skill" : "skill-" + i}" data-skill-slot="${i}" data-bar-slot="${i}" draggable="true" title="${label(cfg.name)} · ${label(cfg.desc)}">${icon(cfg.icon)}<span>${label(cfg.name)}</span><kbd>${keyLabel(game.controls.bindings["skill" + (i + 1)])}</kbd>${i === 0 ? '<i id="skill-overlay"></i><b id="skill-countdown"></b>' : `<b id="extra-cooldown-${i}"></b>`}<i class="ability-lock" id="skill-lock-${i}">${icon("lock")}</i></button>`;
+      return `<button class="action-slot ${i === 0 ? "skill-slot" : "extra-skill"}" data-action="${i === 0 ? "skill" : "skill-" + i}" data-skill-slot="${i}" data-bar-slot="${i}" draggable="true" title="${label(cfg.name)} · ${label(cfg.desc)}">${icon(cfg.icon)}<span>${label(cfg.name)}</span><kbd>${keyLabel(game.controls.bindings["skill" + (i + 1)])}</kbd><em class="slot-cost">${cfg.cost}</em><i class="slot-cooldown" id="slot-cd-${i}"></i>${i === 0 ? '<i id="skill-overlay"></i><b id="skill-countdown"></b>' : `<b id="extra-cooldown-${i}"></b>`}<i class="ability-lock" id="skill-lock-${i}">${icon("lock")}</i></button>`;
     })
     .join(
       "",
-    )}<button class="action-slot" data-action="dodge">${icon("boot")}<span>${tr("Рывок", "Dodge")}</span><kbd>SHIFT</kbd><b id="dodge-countdown"></b></button><i class="slot-divider"></i><button class="action-slot potion-slot" data-action="potion">${icon("potion")}<span>${tr("Зелье", "Potion")}</span><kbd>R</kbd><b id="potion-count"></b><i class="potion-countdown" id="potion-countdown"></i></button><button class="action-slot interact-slot" data-action="interact">${icon("leaf")}<span>${tr("Действие", "Interact")}</span><kbd>E</kbd></button></div><div class="interaction-prompt" id="interaction-prompt" hidden></div><div class="movement-tip" id="movement-tip"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>${tr("Движение", "Move")}</span><i></i><span>${tr("Нажмите на тропу, чтобы идти", "Click a trail to walk")}</span><button data-action="dismissTip" aria-label="${tr("Скрыть подсказку", "Hide hint")}">×</button></div><div class="touch-joystick" id="joystick"><div class="joystick-knob"></div></div>`;
+    )}<button class="action-slot" data-action="dodge">${icon("boot")}<span>${tr("Рывок", "Dodge")}</span><kbd>SHIFT</kbd><b id="dodge-countdown"></b></button><i class="slot-divider"></i><button class="action-slot potion-slot" data-action="potion">${icon("potion")}<span>${tr("Зелье", "Potion")}</span><kbd>R</kbd><b id="potion-count"></b><i class="potion-countdown" id="potion-countdown"></i></button><button class="action-slot interact-slot" data-action="interact">${icon("leaf")}<span>${tr("Действие", "Interact")}</span><kbd>E</kbd></button><div class="hud-globe mana"><div class="globe-frame"><i class="globe-fill" id="mana-globe"></i><i class="globe-shine"></i></div><span id="mana-globe-text"></span></div></div><div class="interaction-prompt" id="interaction-prompt" hidden></div><div class="movement-tip" id="movement-tip"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>${tr("Движение", "Move")}</span><i></i><span>${tr("Нажмите на тропу, чтобы идти", "Click a trail to walk")}</span><button data-action="dismissTip" aria-label="${tr("Скрыть подсказку", "Hide hint")}">×</button></div><div class="touch-joystick" id="joystick"><div class="joystick-knob"></div></div>`;
   const ctx = document.querySelector("#hud-avatar").getContext("2d");
   ctx.imageSmoothingEnabled = false;
   drawHero(ctx, 26, 50, s.characterClass, {
     ...s.appearance,
+    race: s.race,
     player: true,
     equipment: s.equippedWearables,
     scale: ["spear", "staff", "frostStaff", "wand"].includes(s.equippedWeapon)
@@ -248,6 +342,18 @@ function updateHUD() {
     `${Math.ceil(s.hp)} / ${stats.maxHp}`;
   document.querySelector("#mana-value").textContent =
     `${Math.floor(s.mana)} / ${stats.maxMana}`;
+  document.querySelector("#hp-globe").style.height =
+    `${Math.max(0, Math.min(100, (s.hp / stats.maxHp) * 100))}%`;
+  document.querySelector("#mana-globe").style.height =
+    `${Math.max(0, Math.min(100, (s.mana / stats.maxMana) * 100))}%`;
+  document.querySelector("#hp-globe-text").textContent =
+    `${Math.ceil(s.hp)} / ${stats.maxHp}`;
+  document.querySelector("#mana-globe-text").textContent =
+    `${Math.floor(s.mana)} / ${stats.maxMana}`;
+  document.querySelector("#xp-text").textContent = tr(
+    `Опыт ${Math.floor(s.xp)} / ${game.xpNeeded}${s.skillPoints ? ` · очков: ${s.skillPoints}` : ""}`,
+    `XP ${Math.floor(s.xp)} / ${game.xpNeeded}${s.skillPoints ? ` · points: ${s.skillPoints}` : ""}`,
+  );
   document.querySelector("#xp-fill").style.width =
     `${(s.xp / game.xpNeeded) * 100}%`;
   document.querySelector("#level-label").textContent = s.level;
@@ -258,15 +364,15 @@ function updateHUD() {
   document
     .querySelector(".potion-slot")
     .classList.toggle("on-cooldown", game.potionCooldown > 0);
-  document.querySelector("#location-name").textContent = label(
-    regions[game.currentRegion] || regions.village,
-  );
+  document.querySelector("#location-name").textContent = s.interior
+    ? label(interiorDefs[s.interior.id].name)
+    : label(regions[game.currentRegion] || regions.village);
   const climate = game.climate,
     hours = Math.floor(climate.hour);
   document.querySelector("#time-label").textContent =
     `${String(hours).padStart(2, "0")}:${String(Math.floor((climate.hour % 1) * 60)).padStart(2, "0")}`;
   document.querySelector("#weather-badge").innerHTML =
-    `${icon(climate.weather === "snow" ? "snow" : climate.weather === "storm" ? "spark" : "sun")}<span>${label(weatherNames[climate.weather])}${climate.night ? " · " + tr("Ночь", "Night") : ""}</span>`;
+    `${icon(climate.weather === "snow" ? "snow" : climate.weather === "storm" ? "spark" : "sun")}<span>${label(seasonNames[climate.season])} · ${label(weatherNames[climate.weather])}${climate.night ? " · " + tr("Ночь", "Night") : ""}</span>`;
   document.querySelector("#weather-badge").title = weatherDescription(climate);
   const boss = game.enemies.find((e) => e.boss && e.engaged && e.hp > 0),
     bossEl = document.querySelector("#boss-health");
@@ -279,7 +385,7 @@ function updateHUD() {
   dungeonEl.hidden = !s.activeDungeon;
   if (s.activeDungeon) {
     const d = s.activeDungeon;
-    dungeonEl.innerHTML = `<strong>${tr("Этаж", "Floor")} ${d.floor}/${dungeons[d.id].floors}</strong><span>${tr("Стражи", "Guards")}: ${game.enemies.filter((e) => e.hp > 0 && !e.boss && !e.summoned).length}${game.world.gateOpen ? " · " + tr("Зал открыт", "Hall open") : ""}</span>`;
+    dungeonEl.innerHTML = `<strong>${label(difficulties[d.difficulty || 0].name)} · ${tr("Этаж", "Floor")} ${d.floor}/${dungeons[d.id].floors}</strong><span>${tr("Стражи", "Guards")}: ${game.enemies.filter((e) => e.hp > 0 && !e.boss && !e.summoned).length}${game.world.gateOpen ? " · " + tr("Зал открыт", "Hall open") : ""}</span>`;
   }
   const quest = s.activeDungeon
     ? {
@@ -343,6 +449,11 @@ function updateHUD() {
         cd > 0 ? Math.ceil(cd) : "";
     document.querySelector("#skill-lock-" + i).hidden =
       cfg.rank > 0 && s.level >= cfg.level && !!s.equippedWeapon;
+    document.querySelector("#slot-cd-" + i).style.height =
+      cd > 0 ? `${Math.min(100, (cd / cfg.cooldown) * 100)}%` : "0";
+    document
+      .querySelector(`[data-skill-slot="${i}"]`)
+      .classList.toggle("no-mana", cfg.rank > 0 && s.mana < cfg.cost);
   }
   document.querySelector("#skill-points-dot").textContent =
     s.skillPoints > 0 ? s.skillPoints : "";
@@ -353,6 +464,11 @@ function updateHUD() {
     ["bulwark", "shield", tr("Железная кожа", "Iron skin")],
     ["poison", "leaf", tr("Отравление", "Poisoned")],
     ["chilled", "snow", tr("Замерзание", "Chilled")],
+    ["berserk", "sword", tr("Ярость зверя", "Beast rage")],
+    ["avatar", "holy", tr("Аватар света", "Avatar of light")],
+    ["divineShield", "shield", tr("Божественный щит", "Divine shield")],
+    ["retribution", "sun", tr("Возмездие", "Retribution")],
+    ["pact", "skull", tr("Тёмный пакт", "Dark pact")],
   ]
     .filter(([id]) => game.buffs[id] > 0)
     .map(([id, i, name]) => `${icon(i)}${name} ${Math.ceil(game.buffs[id])}s`)
@@ -390,7 +506,7 @@ function startGame(save) {
   screen.hidden = true;
   hud.hidden = false;
   app.classList.add("playing");
-  app.classList.remove("creating");
+  app.classList.remove("creating", "titled");
   game.load(save);
   existingSave = save;
   previousQuestHTML = "";
@@ -401,8 +517,8 @@ function startGame(save) {
   else if (save.playtime < 1)
     toast(
       tr(
-        "Рюкзак I: возьмите стартовое оружие. Одежду предстоит найти или создать. Затем поговорите со старостой.",
-        "Backpack I: equip your starting weapon. Find or craft clothing, then speak to the elder.",
+        "Оружие уже в руках. Поговорите со старостой Оливером у костра — он ждёт вас.",
+        "Your weapon is in hand. Speak to Elder Oliver by the campfire — he is waiting.",
       ),
     );
 }
@@ -423,15 +539,179 @@ function closeModal() {
   modalRoot.innerHTML = "";
   syncPause();
 }
+// Game-style conversation: our hero on the left, the speaker on the right,
+// text in the middle with numbered answers (keys 1-9 pick an answer).
+let typeTimer = null;
 function dialog(o, text, buttons, extra = "") {
+  const s = game.save;
   openModal(
     label(o.name),
-    `<div class="dialog-person"><canvas id="dialog-portrait" width="90" height="90"></canvas><div><span>${label(o.role || ["Житель долины", "Valley resident"])}</span><p>${text}</p></div></div>${extra}<div class="dialog-actions">${buttons}</div>`,
-    "dialog",
-    tr("РАЗГОВОР У ТРОПЫ", "A CONVERSATION BY THE TRAIL"),
+    `<div class="vn-dialog"><div class="vn-portrait hero"><canvas id="vn-hero" width="120" height="132"></canvas><span>${escapeHTML(s?.name || "")}</span></div><div class="vn-center"><span class="vn-role">${label(o.role || ["Житель долины", "Valley resident"])}</span><h3>${label(o.name)}</h3><p class="vn-text" data-full="${escapeHTML(text)}"></p><div class="vn-choices">${buttons}</div></div><div class="vn-portrait npc"><canvas id="vn-npc" width="120" height="132"></canvas><span>${label(o.name)}</span></div></div>${extra ? `<div class="vn-extra">${extra}</div>` : ""}`,
+    "dialog vn",
+    tr("РАЗГОВОР", "CONVERSATION"),
   );
-  const ctx = document.querySelector("#dialog-portrait").getContext("2d");
-  drawHero(ctx, 45, 79, o.style, { scale: 2 });
+  const hero = document.querySelector("#vn-hero").getContext("2d"),
+    npc = document.querySelector("#vn-npc").getContext("2d");
+  hero.imageSmoothingEnabled = npc.imageSmoothingEnabled = false;
+  if (s)
+    drawHero(hero, 60, 122, s.characterClass, {
+      ...s.appearance,
+      race: s.race,
+      player: true,
+      equipment: s.equippedWearables,
+      weapon: s.equippedWeapon,
+      armor: s.equippedArmor,
+      scale: 2.6,
+      facing: 0,
+    });
+  drawHero(npc, 60, 122, o.style, { scale: 2.6, facing: Math.PI });
+  // Typewriter reveal; a click on the text shows it instantly.
+  const el = document.querySelector(".vn-text"),
+    full = text.replace(/<[^>]+>/g, "");
+  let shown = 0;
+  clearInterval(typeTimer);
+  typeTimer = setInterval(() => {
+    shown = Math.min(full.length, shown + 3);
+    el.textContent = full.slice(0, shown);
+    if (shown >= full.length) clearInterval(typeTimer);
+  }, 16);
+  el.addEventListener("click", () => {
+    clearInterval(typeTimer);
+    el.textContent = full;
+  });
+}
+// Story scenes: the conversation decides what happens next. Class and race answers are tagged.
+function playScene(id, node = "start", answer = null) {
+  const s = game.save,
+    sc = scenes[id],
+    buttons = sceneChoices(s, id, node)
+      .map((ch) => {
+        const tag = choiceTag(s, ch);
+        return `<button class="button ${ch.primary ? "primary" : "secondary"} ${tag ? "tagged" : ""}" data-action="sc-${id}-${node}-${ch.id}">${tag ? `<em class="choice-tag">[${escapeHTML(tag)}]</em>` : ""}<span>${label(ch.text)}</span></button>`;
+      })
+      .join("");
+  dialog(sc.speaker(s), answer ? label(answer) : sceneText(s, id, node), buttons);
+}
+function storyCtx() {
+  const s = game.save,
+    st = storyOf(s),
+    ctx = { s, st, g: game, closed: false };
+  const done = (message) => {
+    ctx.closed = true;
+    saveAndUpdate();
+    closeModal();
+    if (message) toast(message);
+  };
+  Object.assign(ctx, {
+    log: (entry) => {
+      st.log.push(entry);
+      if (st.log.length > 40) st.log.shift();
+    },
+    startQuest: (entry) => {
+      ctx.log(entry);
+      s.quest = 1;
+      done(tr("Новое задание: «Шёпот обелиска». Лесной обелиск — к северу.", "New quest: “Whisper of the obelisk”. The forest obelisk lies north."));
+    },
+    setQuest: (n) => {
+      s.quest = n;
+      audio.effect("quest");
+      done(tr("Задание обновлено. Загляните в журнал.", "Quest updated. Check your journal."));
+    },
+    wave: (tag, anchor, list) => {
+      game.spawnStoryWave(tag, anchor, list);
+      done(tr("Скверна поднимается! Отбейтесь — и обелиск загорится.", "The blight rises! Fight it off and the obelisk will ignite."));
+    },
+    light: (id) => game.lightObelisk(id),
+    rinReward: (gone) => {
+      s.gold += gone ? 0 : 90;
+      game.addXp(80);
+      s.quest = 5;
+      done(gone ? tr("Рин ушёл. Путь к Сердцу долины — на юго-восток, через руины.", "Rin is gone. The way to the Heart lies south-east, through the ruins.") : tr("Рин показал тропу к Сердцу долины. +90 монет.", "Rin showed you the trail to the Heart. +90 coins."));
+    },
+    awaken: (hp, dmg, entry) => {
+      s.flags.bossAwake = true;
+      const e = game.enemies.find((e) => e.type === "guardian" && e.hp > 0);
+      if (e) game.shapeBoss(e, hp, dmg);
+      ctx.log(entry);
+      done(tr("Страж пробудился. Следите за красным кругом!", "The Warden is awake. Watch for the red circle!"));
+    },
+    spare: () => {
+      const e = game.enemies.find((e) => e.type === "guardian");
+      st.fate.guardian = "spared";
+      st.dawn += 1;
+      s.flags.guardianBlessing = true;
+      s.flags.bossAwake = s.flags.bossDefeated = true;
+      s.quest = 6;
+      ctx.log(["Страж Ардана уснул без боя и благословил вас: +40 к здоровью.", "Ardan's Warden lay down without a fight and blessed you: +40 health."]);
+      if (e) {
+        e.hp = 0;
+        game.defeated.add(e.id);
+        game.bossDrop(e);
+        game.addXp(e.xp);
+        game.enemies = game.enemies.filter((x) => x !== e);
+      }
+      done(tr("Страж уснул навсегда. Вернитесь к Оливеру.", "The Warden sleeps forever. Return to Oliver."));
+    },
+    finishAct: () => {
+      if (st.trust > -2) s.gold += 200;
+      game.addXp(150);
+      s.quest = 7;
+      s.flags.victory = true;
+      done(tr("Новая глава: «Четыре печати глубин».", "New chapter: “Four depth seals”."));
+    },
+    rift: (hp, dmg, entry) => {
+      if (!game.openRift()) {
+        ctx.closed = true;
+        closeModal();
+        toast(tr("Подойдите ближе к Сердцу долины.", "Move closer to the Heart of the valley."));
+        return;
+      }
+      const boss = game.enemies.find((e) => e.type === "eclipse");
+      const extraHp = (st.fate.ivva === "pact" ? 0.9 : 1) * (st.mods.darkResonance ? 0.85 : 1),
+        extraDmg = st.fate.ivva === "redeemed" ? 0.85 : 1;
+      if (boss) game.shapeBoss(boss, hp * extraHp, dmg * extraDmg);
+      if (st.fate.rin === "enemy") game.spawnStoryWave("ashen", "altar", [["bandit", 3]]);
+      ctx.log(entry);
+      done(st.fate.rin === "enemy" ? tr("Нерей вышел на свет — и с ним Рин во главе Пепельных!", "Nerei steps into the light — and Rin leads the Ashen beside him!") : tr("Разлом открыт. Нерей Бессветный выходит на свет!", "The rift is open. Nerei the Lightless steps into the light!"));
+    },
+    ending: (kind) => {
+      ctx.closed = true;
+      if (kind === "peace") {
+        s.quest = 11;
+        s.gold += 300;
+        s.skillPoints += 2;
+        s.flags.reconciled = s.flags.dawnHero = true;
+        game.addXp(600);
+        audio.effect("quest");
+        saveAndUpdate();
+        showEnding();
+      } else action(kind === "dusk" ? "epilogueDusk" : "epilogue");
+    },
+  });
+  return ctx;
+}
+function runSceneChoice(name) {
+  const [, id, node, cid] = name.split("-"),
+    s = game.save,
+    st = storyOf(s),
+    ch = scenes[id]?.nodes[node]?.choices.find((c) => c.id === cid);
+  // Follow-up narration ("free" nodes) may end after the scene moved the story on.
+  if (!ch || (!scenes[id].nodes[node].free && !sceneOpen(s, id)) || !sceneChoices(s, id, node).includes(ch)) {
+    closeModal();
+    return;
+  }
+  const ctx = storyCtx(),
+    next = ch.run ? ch.run(ctx) : undefined;
+  if (ctx.closed) return;
+  if (ch.answer) {
+    st.seen.push(id + ":" + cid);
+    saveAndUpdate();
+    playScene(id, node, ch.answer);
+    return;
+  }
+  saveAndUpdate();
+  if (typeof next === "string") playScene(id, next);
+  else closeModal();
 }
 function showHelp() {
   const key = (action) => keyLabel(game.controls.bindings[action]);
@@ -481,12 +761,36 @@ function showHelp() {
     "help",
   );
 }
+let journalTab = "story";
 function showJournal() {
   const s = game.save,
-    q = questInfo(s);
+    q = questInfo(s),
+    tabs = [
+      ["story", tr("Сюжет", "Story"), "book"],
+      ["fates", tr("Решения", "Choices"), "flag"],
+      ["people", tr("Жители", "Villagers"), "home"],
+      ["bosses", tr("Боссы и подземелья", "Bosses & dungeons"), "skull"],
+      ["stats", tr("Итоги", "Records"), "crown"],
+    ];
+  const side = [
+    ["leaf", tr("Запасы для Миры", "Supplies for Mira"), s.flags.herbQuestDone, s.flags.herbQuestDone ? tr("Завершено · награда получена", "Completed · reward claimed") : s.flags.herbQuest ? tr(`Принесите 6 трав: ${s.inventory.herb}/6. Награда: 3 зелья и 50 монет.`, `Bring 6 herbs: ${s.inventory.herb}/6. Reward: 3 potions and 50 coins.`) : tr("Поговорите с травницей в Лиственной деревне.", "Speak to the herbalist in Leafhaven.")],
+    ["sword", tr("Работа для кузнеца", "A smith’s work"), s.flags.smithQuestDone, s.flags.smithQuestDone ? tr("Завершено · награда получена", "Completed · reward claimed") : s.flags.smithQuest ? tr(`Принесите 4 руды: ${s.inventory.ore}/4. Награда: улучшение оружия.`, `Bring 4 ore: ${s.inventory.ore}/4. Reward: a weapon upgrade.`) : tr("Поговорите с Брамом у кузницы.", "Speak to Bram by the forge.")],
+    ["target", tr("Патруль дальних земель", "Farlands patrol"), s.flags.expeditionDone, s.flags.expeditionDone ? tr("Завершено · оружие получено", "Completed · weapon claimed") : s.flags.expedition ? tr(`Волки ${s.kills.wolf || 0}/6 · Стражи ${s.kills.sentinel || 0}/4`, `Wolves ${s.kills.wolf || 0}/6 · Sentinels ${s.kills.sentinel || 0}/4`) : tr("Капитан Лея ждёт на Речной пристани.", "Captain Lea awaits in Riverport.")],
+  ];
+  const st = storyOf(s),
+    log = storyLog(s),
+    fates = fateLines(s),
+    lean = st.dawn - st.dusk;
+  const body = {
+    fates: `<div class="story-balance"><span>${icon("sun")}${tr("Рассвет", "Dawn")} <b>${st.dawn}</b></span><div class="balance-bar"><i style="left:${Math.max(4, Math.min(96, 50 - lean * 6))}%"></i></div><span><b>${st.dusk}</b> ${tr("Сумерки", "Dusk")}${icon("moon")}</span></div><p class="fine-print">${lean > 1 ? tr("Знак на ладони светится золотом. Свет ведёт вас.", "The Mark glows gold. Light guides you.") : lean < -1 ? tr("Знак на ладони подёрнут серым пеплом. Тьма ближе, чем кажется.", "The Mark is veiled in grey ash. Darkness is closer than it seems.") : tr("Знак мерцает — вы ещё не выбрали сторону.", "The Mark flickers — you have not yet chosen a side.")} ${tr("Доверие Оливера", "Oliver's trust")}: <b>${st.trust > 0 ? "+" : ""}${st.trust}</b></p>${fates.length ? `<h3 class="small-heading">${tr("СУДЬБЫ", "FATES")}</h3><ul class="fate-list">${fates.map((f) => `<li>${escapeHTML(f)}</li>`).join("")}</ul>` : ""}<h3 class="small-heading">${tr("ВАШИ РЕШЕНИЯ", "YOUR DECISIONS")}</h3>${log.length ? `<ol class="decision-log">${log.map((e) => `<li>${escapeHTML(e)}</li>`).join("")}</ol>` : `<p class="fine-print">${tr("Вы ещё не приняли ни одного решения. Каждый ответ в разговорах меняет историю.", "You haven't made any decisions yet. Every answer in a conversation changes the story.")}</p>`}`,
+    story: `<div class="journal-main"><span class="quest-type">${tr("ОСНОВНАЯ ИСТОРИЯ", "MAIN STORY")} · ${chapterLabel(s.quest)}</span><h3>${q.title}</h3><p>${q.desc}</p>${q.steps.map(([name, have, need]) => `<div class="journal-step ${have >= need ? "done" : ""}">${icon(have >= need ? "check" : "flag")}<span>${name}</span><b>${Math.min(have, need)} / ${need}</b></div>`).join("")}${btn(tr("Посмотреть на карте", "Show on map"), "map", "secondary", "map")}</div><div class="chapter-line">${[0, 3, 7, 8, 11].map((n, i) => `<span class="${s.quest >= n ? "reached" : ""}">${["I", "II", "III", "IV", "★"][i]}</span>`).join("<i></i>")}</div>`,
+    people: `<div class="side-quests">${side.map(([ic, title, done, text]) => `<div class="${done ? "done" : ""}">${icon(ic)}<span><strong>${title}</strong><small>${text}</small></span>${done ? icon("check") : ""}</div>`).join("")}</div>${btn(tr("Доска поручений", "Contract board"), "contracts", "secondary", "flag")}`,
+    bosses: `<h3 class="small-heading">${tr("МИРОВЫЕ БОССЫ · ВОЗРОЖДАЮТСЯ ЧЕРЕЗ 20 МИН", "WORLD BOSSES · RETURN AFTER 20 MIN")}</h3><div class="world-boss-list">${worldBosses.map((b) => `<div class="${s.flags["wb-" + b.type] ? "done" : ""}">${icon(s.flags["wb-" + b.type] ? "check" : "skull")}<span><strong>${label(b.name)}</strong><small>${label(regions[{ treant: "amberwood", sandWorm: "island", witch: "marsh", banditKing: "badlands", cyclops: "highlands", frostWyrm: "tundra" }[b.type]])} · ${tr("ур.", "lvl")} ${b.baseLevel}+ · ${label(wearables[b.trophy].name)}</small></span></div>`).join("")}</div><h3 class="small-heading">${tr("ПЕЧАТИ ГЛУБИН", "DEPTH SEALS")}</h3>${dungeonCards()}`,
+    stats: `<div class="journal-stats"><span>${tr("Мест открыто", "Places discovered")}<b>${s.discovered.length} / ${Object.keys(regions).length}</b></span><span>${tr("Сундуков найдено", "Chests found")}<b>${s.collected.filter((x) => x.startsWith("chest")).length} / ${CHEST_COUNT}</b></span><span>${tr("Время в долине", "Time in the valley")}<b>${Math.floor(s.playtime / 60)} ${tr("мин", "min")}</b></span><span>${tr("Врагов побеждено", "Foes defeated")}<b>${Object.values(s.kills).reduce((a, b) => a + b, 0)}</b></span><span>${tr("Подземелий пройдено", "Dungeons cleared")}<b>${Object.values(s.dungeonClears).reduce((a, b) => a + b, 0)}</b></span><span>${tr("Рыбы поймано", "Fish caught")}<b>${s.activities.catches}</b></span></div>`,
+  }[journalTab];
   openModal(
     tr("Журнал приключений", "Adventure journal"),
-    `<div class="journal-main"><span class="quest-type">${tr("ОСНОВНАЯ ИСТОРИЯ", "MAIN STORY")} · ${tr("Глава", "Chapter")} ${Math.min(4, Math.floor(s.quest / 2) + 1)}</span><h3>${q.title}</h3><p>${q.desc}</p>${q.steps.map(([name, have, need]) => `<div class="journal-step ${have >= need ? "done" : ""}">${icon(have >= need ? "check" : "flag")}<span>${name}</span><b>${Math.min(have, need)} / ${need}</b></div>`).join("")}${btn(tr("Посмотреть на карте", "Show on map"), "map", "secondary", "map")}</div><div class="side-quests"><h3>${tr("Истории жителей", "Villagers’ stories")}</h3><div>${icon("leaf")}<span><strong>${tr("Запасы для Миры", "Supplies for Mira")}</strong><small>${s.flags.herbQuestDone ? tr("Завершено · награда получена", "Completed · reward claimed") : s.flags.herbQuest ? tr(`Принесите 6 трав: ${s.inventory.herb}/6. Награда: 3 зелья и 50 монет.`, `Bring 6 herbs: ${s.inventory.herb}/6. Reward: 3 potions and 50 coins.`) : tr("Поговорите с травницей в Лиственной деревне.", "Speak to the herbalist in Leafhaven.")}</small></span>${s.flags.herbQuestDone ? icon("check") : ""}</div><div>${icon("sword")}<span><strong>${tr("Работа для кузнеца", "A smith’s work")}</strong><small>${s.flags.smithQuestDone ? tr("Завершено · награда получена", "Completed · reward claimed") : s.flags.smithQuest ? tr(`Принесите 4 руды: ${s.inventory.ore}/4. Награда: улучшение оружия.`, `Bring 4 ore: ${s.inventory.ore}/4. Reward: a weapon upgrade.`) : tr("Поговорите с Брамом у кузницы.", "Speak to Bram by the forge.")}</small></span>${s.flags.smithQuestDone ? icon("check") : ""}</div><div>${icon("target")}<span><strong>${tr("Патруль дальних земель", "Farlands patrol")}</strong><small>${s.flags.expeditionDone ? tr("Завершено · оружие получено", "Completed · weapon claimed") : s.flags.expedition ? tr(`Волки ${s.kills.wolf || 0}/6 · Стражи ${s.kills.sentinel || 0}/4`, `Wolves ${s.kills.wolf || 0}/6 · Sentinels ${s.kills.sentinel || 0}/4`) : tr("Капитан Лея ждёт на Речной пристани.", "Captain Lea awaits in Riverport.")}</small></span></div></div><h3 class="small-heading">${tr("ПЕЧАТИ ГЛУБИН · НОВАЯ КАМПАНИЯ", "DEPTH SEALS · NEW CAMPAIGN")}</h3>${dungeonCards()}${btn(tr("Доска поручений", "Contract board"), "contracts", "secondary", "flag")}<div class="journal-stats"><span>${tr("Мест открыто", "Places discovered")}<b>${s.discovered.length} / ${Object.keys(regions).length}</b></span><span>${tr("Сундуков найдено", "Chests found")}<b>${s.collected.filter((x) => x.startsWith("chest")).length} / ${CHEST_COUNT}</b></span><span>${tr("Время в долине", "Time in the valley")}<b>${Math.floor(s.playtime / 60)} ${tr("мин", "min")}</b></span></div>`,
+    `<div class="vendor-tabs journal-tabs">${tabs.map(([id, name, ic]) => `<button class="recipe-chip ${journalTab === id ? "active" : ""}" data-action="journalTab-${id}">${icon(ic)}${name}</button>`).join("")}</div>${body}`,
     "journal",
   );
 }
@@ -578,15 +882,51 @@ const materialHints = {
 function ingredientCounts(inputs) {
   return `<div class="ingredient-counts">${Object.entries(inputs).map(([k,n]) => `<span class="${game.save.inventory[k] >= n ? 'enough' : 'missing'}" title="${label(materialHints[k] || items[k])}">${icon(itemIcon(k))}${label(items[k])}<b>${game.save.inventory[k] || 0}/${n}</b></span>`).join('')}</div>`;
 }
+// Character sheet and gear comparison: every stat a piece changes, with the delta.
+function statLines(st) {
+  return [
+    ["sword", tr("Урон", "Damage"), st.damage],
+    ["shield", tr("Защита", "Defense"), st.defense],
+    ["heart", tr("Здоровье", "Health"), st.maxHp],
+    ["spark", tr("Энергия", "Energy"), st.maxMana],
+    ["target", tr("Крит", "Crit"), Math.round(st.crit * 100), "%"],
+    ["boot", tr("Скорость", "Speed"), Math.round(st.speed)],
+    ["map", tr("Дальность", "Range"), Math.round(st.range / TILE * 10) / 10],
+    ["reset", tr("Восст. энергии", "Energy regen"), Math.round(st.manaRegen * 100) / 100, "/s"],
+  ];
+}
+function fullStats(save) {
+  const st = deriveStats(save, classes[save.characterClass]);
+  return { ...st, crit: critChance(save, st.weapon) };
+}
+function characterSheet() {
+  return `<div class="char-sheet">${statLines(fullStats(game.save)).map(([ic, name, v, unit = ""]) => `<span>${icon(ic)}<small>${name}</small><b>${v}${unit}</b></span>`).join("")}</div>`;
+}
+function gearComparison(kind, id) {
+  const s = game.save,
+    trial = { ...s, equippedWearables: { ...s.equippedWearables } };
+  if (kind === "w") trial.equippedWeapon = id;
+  else if (kind === "a") trial.equippedArmor = id;
+  else trial.equippedWearables[wearables[id].slot] = id;
+  const now = statLines(fullStats(s)),
+    then = statLines(fullStats(trial));
+  const rows = then
+    .map(([ic, name, v, unit = ""], i) => {
+      const d = Math.round((v - now[i][2]) * 100) / 100;
+      return d ? `<span class="${d > 0 ? "up" : "down"}">${icon(ic)}${name} ${d > 0 ? "+" : ""}${d}${unit}</span>` : "";
+    })
+    .join("");
+  return `<div class="gear-compare">${rows || `<span>${tr("Не меняет характеристики (уже надето?)", "No stat change (already equipped?)")}</span>`}</div>`;
+}
 function bagItemDescription(e) {
   if (!e) return tr("Нажмите предмет: здесь появятся свойства и действия. Снаряжение также можно перетащить на героя.", "Select an item to see its properties and actions. You can also drag equipment onto your hero.");
   if (e.type === 'w') {
     const w = weapons[e.id], stats = deriveStats({...game.save, equippedWeapon:e.id}, classes[game.save.characterClass]);
-    return `${label(w.desc)} · Lv. ${w.level || 1} · ${stats.damage} ${tr('урона','damage')} (${stats.damage-game.stats.damage >= 0 ? '+' : ''}${stats.damage-game.stats.damage}) · ${w.cooldown} ${tr('с между атаками','s between attacks')}`;
+    return `${label(w.desc)} · Lv. ${w.level || 1} · ${stats.damage} ${tr('урона','damage')} · ${w.cooldown} ${tr('с между атаками','s between attacks')}${gearComparison('w', e.id)}`;
   }
   if (e.type === 'a' || e.type === 'g') {
     const a = e.type === 'a' ? armors[e.id] : wearables[e.id];
-    return `Lv. ${a.level || 1} · +${a.defense} ${tr('защиты','defense')} · +${a.hp} HP${a.mana ? ` · +${a.mana} MP` : ''}`;
+    return `Lv. ${a.level || 1} · +${a.defense} ${tr('защиты','defense')} · +${a.hp} HP${a.mana ? ` · +${a.mana} MP` : ''}${a.speed ? ` · ${a.speed > 0 ? '+' : ''}${a.speed} ${tr('скорости','speed')}` : ''}${a.crit ? ` · +${Math.round(a.crit*100)}% ${tr('крит','crit')}` : ''}${gearComparison(e.type, e.id)}`;
   }
   return label(materialHints[e.id] || {
     rod:['Нужна для рыбалки. На берегу со знаком рыбы нажмите E.','Required for fishing. Press E at shores marked with a fish.'],
@@ -596,17 +936,27 @@ function bagItemDescription(e) {
     berry:['Восстанавливает 12 HP. Общий откат: 8 с.','Restores 12 HP. Shared cooldown: 8 s.'],
     potion:['Восстанавливает 65 HP. Общий откат: 8 с.','Restores 65 HP. Shared cooldown: 8 s.'],
     manaPotion:['Восстанавливает 60 энергии. Общий откат: 8 с.','Restores 60 energy. Shared cooldown: 8 s.'],
-  }[e.id] || (e.id.includes('Scroll') ? ['Откройте книгу умений: манускрипт расходуется только при первом изучении третьего приёма школы.','Open the skill book: a manuscript is consumed only when first learning a school’s third ability.'] : ['Материал для ремесла или торговли.','A material for crafting or trading.']));
+  }[e.id] || (e.id.includes('Scroll') ? ['Прочитайте манускрипт своего класса: +1 очко навыка.','Read a manuscript of your class: +1 skill point.'] : ['Материал для ремесла или торговли.','A material for crafting or trading.']));
+}
+let invTab = "gear";
+function bagRarity(e) {
+  if (e.type === "w") return weapons[e.id].rarity || "common";
+  if (e.type === "a") return armors[e.id].rarity || ((armorTier[e.id] || 1) >= 5 ? "epic" : (armorTier[e.id] || 1) >= 3 ? "rare" : "common");
+  if (e.type === "g") {
+    const w = wearables[e.id];
+    return w.source ? "legendary" : w.level >= 10 ? "epic" : w.level >= 5 ? "rare" : "common";
+  }
+  return e.id === "essence" ? "epic" : e.id.endsWith("Scroll") || e.id === "pearl" ? "rare" : "common";
 }
 function showInventory() {
   const s = game.save, all = bagEntries(), entries = all.filter(e => bagFilter === 'all' || (bagFilter === 'gear' ? e.type !== 'i' : bagFilter === 'materials' ? e.type === 'i' && materialHints[e.id] : e.type === 'i' && !materialHints[e.id])),
     chosen = all.find(e => e.key === bagSelected), r = selectedRecipe(), reason = r ? game.craftReason(r.id) : '',
     batch = r && !r.gear ? Math.min(99, ...Object.entries(r.inputs).map(([k,n]) => Math.floor((s.inventory[k] || 0)/n))) : 1,
     equipped = {...s.equippedWearables, mainhand:s.equippedWeapon, chest:s.equippedArmor === 'none' ? null : s.equippedArmor};
-  const slots = Object.entries(slotNames).map(([slot,name]) => {
-    const id = equipped[slot], a = slot === 'mainhand' ? weapons[id] : slot === 'chest' ? armors[id] : wearables[id];
-    return `<button class="gear-cell ${id ? 'filled' : ''}" data-gear-slot="${slot}" data-action="unequip-${slot}" title="${label(name)}${a ? ' · '+label(a.name)+' · '+tr('Нажмите, чтобы снять','Click to remove') : ''}">${icon(id ? a.icon || gearIcon(slot) : gearIcon(slot))}<small>${label(name)}</small></button>`;
-  }).join('');
+  const slot = (key) => {
+    const name = slotNames[key], id = equipped[key], a = key === 'mainhand' ? weapons[id] : key === 'chest' ? armors[id] : wearables[id];
+    return `<button class="gear-cell ${id ? 'filled' : ''}" data-gear-slot="${key}" data-action="unequip-${key}" title="${label(name)}${a ? ' · '+label(a.name)+' · '+tr('Нажмите, чтобы снять','Click to remove') : ''}">${icon(id ? a.icon || gearIcon(key) : gearIcon(key))}<small>${a ? label(a.name) : label(name)}</small></button>`;
+  };
   let selectedActions = '';
   if (chosen) {
     if (chosen.type !== 'i') {
@@ -615,40 +965,45 @@ function showInventory() {
     }
     else if (['berry','cookedFish','bandage'].includes(chosen.id)) selectedActions = btn(tr('Использовать','Use'),'eat-'+chosen.id,'primary');
     else if (['potion','manaPotion'].includes(chosen.id)) selectedActions = btn(tr('Использовать','Use'),'use-'+chosen.id,'primary');
+    else if (chosen.id === s.characterClass + 'Scroll') selectedActions = btn(tr('Прочитать · +1 очко','Read · +1 point'),'readScroll','primary','book');
     else if (recipes.some(r => chosen.id in r.inputs)) selectedActions = btn(tr('Подходящие рецепты','Matching recipes'),'recipesFor-'+chosen.id,'secondary','book');
   }
-  openModal(tr('Рюкзак и экипировка','Backpack & equipment'),
-  `<div class="inventory-heading"><div>${badge(escapeHTML(s.name)+' · Lv. '+s.level)}<p>${game.stats.maxHp} HP · ${game.stats.defense} ${tr('защиты','defense')} · ${game.stats.damage} ${tr('урона','damage')}</p></div><div class="inventory-gold">${icon('coin')}${s.gold}</div></div>
-  <div class="survival-top"><div class="paperdoll">${slots}<canvas id="paperdoll" width="160" height="190"></canvas></div>
-  <div class="small-workbench"><h3>${tr('Верстак · выберите рецепт','Workbench · choose a recipe')}</h3><select id="recipe-picker" aria-label="${tr('Рецепт','Recipe')}"><option value="">${tr('Выберите, что создать…','Choose what to craft…')}</option>${recipes.map(q => `<option value="${q.id}" ${r?.id === q.id ? 'selected' : ''}>${label(q.name)}${recipeItem(q).n > 1 ? ' × '+recipeItem(q).n : ''}</option>`).join('')}</select>
+  const tabs = `<div class="vendor-tabs inv-tabs">${[['gear',tr('Снаряжение','Equipment'),'bag'],['craft',tr('Ремесло','Crafting'),'wood']].map(([id,n,ic]) => `<button class="recipe-chip ${invTab === id ? 'active' : ''}" data-action="invTab-${id}">${icon(ic)}${n}</button>`).join('')}</div>`;
+  const head = `<div class="inventory-heading"><div>${badge(escapeHTML(s.name)+' · '+label((races[s.race] || races.human).name)+' · '+label(classes[s.characterClass].name)+' · Lv. '+s.level)}</div><div class="inventory-gold">${icon('coin')}${s.gold}</div></div>`;
+  const gearTab = `<div class="inv-layout"><section class="doll-panel"><div class="paperdoll2"><div class="doll-col">${['head','chest','legs','feet'].map(slot).join('')}</div><canvas id="paperdoll" width="160" height="190"></canvas><div class="doll-col">${['mainhand','offhand'].map(slot).join('')}</div></div>${characterSheet()}</section>
+  <section class="bag-panel"><div class="bag-filters">${[['all','Всё','All'],['gear','Снаряжение','Equipment'],['materials','Материалы','Materials'],['supplies','Расходники','Supplies']].map(([id,ru,en]) => `<button class="recipe-chip ${bagFilter === id ? 'active' : ''}" data-action="bagFilter-${id}" aria-pressed="${bagFilter === id}">${tr(ru,en)}</button>`).join('')}</div>
+  <div class="block-backpack">${Array.from({length:Math.max(24,Math.ceil(entries.length/6)*6)},(_,i) => {const e=entries[i]; return `<button class="bag-cell ${e ? 'rarity-cell-' + bagRarity(e) : ''} ${e?.key===bagSelected ? 'selected' : ''}" data-bag-index="${all.indexOf(e) < 0 ? all.length+i : all.indexOf(e)}" ${e ? `data-bag-key="${e.key}" draggable="true" data-action="bagSelect-${e.key}" title="${e.name}" aria-label="${e.name} · ${e.n}"` : 'aria-label="'+tr('Пустая ячейка','Empty slot')+'"'}>${e ? icon(e.icon)+`<span class="bag-name">${e.name}</span>${e.n > 1 ? `<b>${e.n}</b>` : ''}` : ''}</button>`;}).join('')}</div>
+  <div class="bag-description"><div><h3 class="${chosen ? 'rarity-' + bagRarity(chosen) : ''}">${chosen ? chosen.name : tr('Выберите предмет','Select an item')}</h3><p>${bagItemDescription(chosen)}</p></div>${selectedActions}</div></section></div>`;
+  const craftTab = `<div class="craft-tab"><div class="small-workbench"><h3>${tr('Верстак · выберите рецепт','Workbench · choose a recipe')}</h3><select id="recipe-picker" aria-label="${tr('Рецепт','Recipe')}"><option value="">${tr('Выберите, что создать…','Choose what to craft…')}</option>${recipes.map(q => `<option value="${q.id}" ${r?.id === q.id ? 'selected' : ''}>${label(q.name)}${recipeItem(q).n > 1 ? ' × '+recipeItem(q).n : ''}</option>`).join('')}</select>
   <div class="craft-layout"><div class="craft-cells">${[0,1,2,3].map(i => `<button class="bag-cell" data-craft-cell="${i}" data-action="craftClear-${i}" title="${craftDraft[i] ? label(items[craftDraft[i]]) : tr('Перетащите материал','Drag an ingredient')}">${craftDraft[i] ? icon(itemIcon(craftDraft[i])) : ''}</button>`).join('')}</div>${icon('arrow')}<button class="craft-output bag-cell" data-action="craftOutput" ${!r || reason ? 'disabled' : ''}>${icon(r ? recipeItem(r).icon : 'book')}<small>${r ? recipeItem(r).name+' × '+recipeItem(r).n : tr('Результат','Output')}</small></button></div>
-  ${r ? ingredientCounts(r.inputs)+`<p class="craft-status ${reason ? 'missing' : 'enough'}" role="status">${reason || tr('Материалы есть · можно создать','Ingredients ready · craft now')}</p><div class="gear-actions"><button class="button primary" data-action="craftMake-${r.id}-1" ${reason ? 'disabled' : ''}>${tr('Создать','Craft')} ${recipeItem(r).n > 1 ? '× '+recipeItem(r).n : ''}${r.gear ? tr(' и надеть',' & equip') : ''}</button>${batch > 1 ? `<button class="button secondary" data-action="craftMake-${r.id}-${batch}" ${reason ? 'disabled' : ''}>${tr('Создать всё','Craft all')} (${batch * recipeItem(r).n})</button>` : ''}</div>` : `<p>${tr('Выберите рецепт сверху: материалы расставятся автоматически. Создание тратит их только после нажатия «Создать». Можно также составить рецепт вручную в сетке 2 × 2.','Choose a recipe above to fill the grid automatically. Materials are spent only when you press Craft. You can also arrange them manually in the 2 × 2 grid.')}</p>`}
-  </div></div>
-  <div class="bag-description"><div><h3>${chosen ? chosen.name : tr('Предметы в рюкзаке','Backpack items')}</h3><p>${bagItemDescription(chosen)}</p></div>${selectedActions}</div>
-  <div class="bag-filters">${[['all','Всё','All'],['gear','Снаряжение','Equipment'],['materials','Материалы','Materials'],['supplies','Расходники','Supplies']].map(([id,ru,en]) => `<button class="recipe-chip ${bagFilter === id ? 'active' : ''}" data-action="bagFilter-${id}" aria-pressed="${bagFilter === id}">${tr(ru,en)}</button>`).join('')}</div>
-  <div class="block-backpack">${Array.from({length:Math.max(18,Math.ceil(entries.length/9)*9)},(_,i) => {const e=entries[i]; return `<button class="bag-cell ${e?.key===bagSelected ? 'selected' : ''}" data-bag-index="${all.indexOf(e) < 0 ? all.length+i : all.indexOf(e)}" ${e ? `data-bag-key="${e.key}" draggable="true" data-action="bagSelect-${e.key}" title="${e.name}" aria-label="${e.name} · ${e.n}"` : 'aria-label="'+tr('Пустая ячейка','Empty slot')+'"'}>${e ? icon(e.icon)+`<span class="bag-name">${e.name}</span><b>${e.n}</b>` : ''}</button>`;}).join('')}</div>
-  <h3 class="small-heading">${tr('РЕЦЕПТЫ · НАЖМИТЕ, ЧТОБЫ СОБРАТЬ','RECIPES · CLICK TO PREPARE')}</h3><div class="recipe-list">${recipes.filter(q => !recipeMaterial || recipeMaterial in q.inputs).map(q => `<button class="recipe-chip ${r?.id===q.id ? 'active' : ''}" data-action="recipe-${q.id}" title="${materialText(q.inputs)}">${icon(recipeItem(q).icon)}<span>${label(q.name)}<small>${recipeItem(q).n} ${tr('шт.','items')} · ${q.camp ? tr('у костра','at camp') : tr('в рюкзаке','in backpack')}</small></span>${icon(game.craftReason(q.id) ? 'lock' : 'check')}</button>`).join('')}</div>
-  <details class="inventory-details"><summary>${tr('Снаряжение: полные характеристики','Equipment: full details')}</summary>${weaponCards()}${armorCards()}${wearableCards('inventory')}</details>${btn(tr('Рыбалка и ремесло','Fishing & crafts'),'activities','secondary','fish')}`, 'inventory');
-  document.querySelector('#recipe-picker').addEventListener('change', e => {
-    if (e.target.value) action('recipe-'+e.target.value);
-    else {craftDraft=[];showInventory();}
-  });
+  ${r ? ingredientCounts(r.inputs)+`<p class="craft-status ${reason ? 'missing' : 'enough'}" role="status">${reason || tr('Материалы есть · можно создать','Ingredients ready · craft now')}</p><div class="gear-actions"><button class="button primary" data-action="craftMake-${r.id}-1" ${reason ? 'disabled' : ''}>${tr('Создать','Craft')} ${recipeItem(r).n > 1 ? '× '+recipeItem(r).n : ''}${r.gear ? tr(' и надеть',' & equip') : ''}</button>${batch > 1 ? `<button class="button secondary" data-action="craftMake-${r.id}-${batch}" ${reason ? 'disabled' : ''}>${tr('Создать всё','Craft all')} (${batch * recipeItem(r).n})</button>` : ''}</div>` : `<p>${tr('Выберите рецепт: материалы расставятся автоматически и спишутся только после нажатия «Создать».','Choose a recipe: ingredients fill in automatically and are spent only when you press Craft.')}</p>`}
+  </div><h3 class="small-heading">${tr('РЕЦЕПТЫ','RECIPES')}</h3><div class="recipe-list">${recipes.filter(q => !recipeMaterial || recipeMaterial in q.inputs).map(q => `<button class="recipe-chip ${r?.id===q.id ? 'active' : ''}" data-action="recipe-${q.id}" title="${materialText(q.inputs)}">${icon(recipeItem(q).icon)}<span>${label(q.name)}<small>${recipeItem(q).n} ${tr('шт.','items')} · ${q.camp ? tr('у костра','at camp') : tr('в рюкзаке','in backpack')}</small></span>${icon(game.craftReason(q.id) ? 'lock' : 'check')}</button>`).join('')}</div>${btn(tr('Рыбалка и ремесло','Fishing & crafts'),'activities','secondary','fish')}</div>`;
+  openModal(tr('Рюкзак и экипировка','Backpack & equipment'), head + tabs + (invTab === 'craft' ? craftTab : gearTab), 'inventory');
+  if (invTab === 'craft') {
+    document.querySelector('#recipe-picker').addEventListener('change', e => {
+      if (e.target.value) action('recipe-'+e.target.value);
+      else {craftDraft=[];showInventory();}
+    });
+    return;
+  }
   const ctx = document.querySelector('#paperdoll').getContext('2d'); ctx.imageSmoothingEnabled=false;
-  drawHero(ctx,80,160,s.characterClass,{...s.appearance,player:true,equipment:s.equippedWearables,weapon:s.equippedWeapon,armor:s.equippedArmor,scale:3.5});
+  drawHero(ctx,80,170,s.characterClass,{...s.appearance,race:s.race,player:true,equipment:s.equippedWearables,weapon:s.equippedWeapon,armor:s.equippedArmor,scale:3.4,time:game.time});
 }
 function purchaseActions(id, item, kind) {
-  const s=game.save, level=item.level || 1, price=item.price || (kind === "weapon" ? 45 : 0),
+  const s=game.save, level=item.level || 1, price=item.price || (kind === "weapon" && !item.recipe ? 45 : 0),
     owned=(kind === "weapon" ? s.ownedWeapons : kind === "armor" ? s.ownedArmors : s.ownedWearables).includes(id),
     equipPrefix={weapon:"equip-",armor:"armorEquip-",wear:"wearEquip-"}[kind],
     buyPrefix={weapon:"buyWeapon-",armor:"armorBuy-",wear:"wearBuy-"}[kind],
     craftPrefix={weapon:"weaponCraft-",armor:"armorCraft-",wear:"wearCraft-"}[kind];
   if (owned) return `<button class="button secondary" data-action="${equipPrefix+id}" ${s.level < level ? 'disabled' : ''}>${s.level < level ? tr('Нужен уровень '+level,'Requires level '+level) : tr('Надеть / взять в руки','Equip')}</button>`;
-  const canCraft=item.recipe && Object.entries(item.recipe).every(([k,n])=>(s.inventory[k]||0)>=n);
-  return `<div class="gear-actions">${price ? `<button class="button secondary" data-action="${buyPrefix+id}" ${s.level < level || s.gold < price ? 'disabled' : ''}>${icon('coin')}${tr('Купить','Buy')} · ${price}</button>` : ''}${item.recipe ? `<button class="button secondary" data-action="${craftPrefix+id}" ${s.level < level || !canCraft ? 'disabled' : ''}>${tr('Создать','Craft')}</button>` : ''}</div>${s.level < level ? `<p class="purchase-reason">${tr('Нужен уровень '+level+' · ваш '+s.level,'Requires level '+level+' · yours '+s.level)}</p>` : price && s.gold < price ? `<p class="purchase-reason">${tr('Не хватает '+(price-s.gold)+' монет','Need '+(price-s.gold)+' more coins')}</p>` : ''}${item.recipe ? ingredientCounts(item.recipe) : ''}`;
+  const missing=missingRequirements(s,item),
+    needs=item.requires ? `<ul class="mythic-needs">${item.requires.map((f)=>`<li class="${s.flags[f] ? 'done' : ''}">${icon(s.flags[f] ? 'check' : 'lock')}${label(mythicRequirementNames[f] || [f,f])}</li>`).join('')}</ul>` : '';
+  const canCraft=!missing.length && item.recipe && Object.entries(item.recipe).every(([k,n])=>(s.inventory[k]||0)>=n);
+  return `<div class="gear-actions">${price ? `<button class="button secondary" data-action="${buyPrefix+id}" ${s.level < level || s.gold < price ? 'disabled' : ''}>${icon('coin')}${tr('Купить','Buy')} · ${price}</button>` : ''}${item.recipe ? `<button class="button secondary" data-action="${craftPrefix+id}" ${s.level < level || !canCraft ? 'disabled' : ''}>${tr('Создать','Craft')}</button>` : ''}</div>${s.level < level ? `<p class="purchase-reason">${tr('Нужен уровень '+level+' · ваш '+s.level,'Requires level '+level+' · yours '+s.level)}</p>` : price && s.gold < price ? `<p class="purchase-reason">${tr('Не хватает '+(price-s.gold)+' монет','Need '+(price-s.gold)+' more coins')}</p>` : ''}${needs}${item.recipe ? ingredientCounts(item.recipe) : ''}`;
 }
 function wearableCards(mode = "shop") {
   const s=game.save;
-  return `<div class="armory-grid">${Object.entries(wearables).filter(([id,a])=>(!a.class || a.class === s.characterClass) && (mode === 'inventory' ? s.ownedWearables.includes(id) : true)).map(([id,a])=>`<article class="gear-card"><div class="gear-title">${icon(gearIcon(a.slot))}<h3>${label(a.name)}</h3></div><p>Lv. ${a.level} · +${a.defense} ${tr('защиты','defense')} · +${a.hp} HP</p>${s.equippedWearables[a.slot] === id ? `<span class="equipped-label">${icon('check')}${tr('Надето','Equipped')}</span>` : purchaseActions(id,a,'wear')}</article>`).join('')}</div>`;
+  return `<div class="armory-grid">${Object.entries(wearables).filter(([id,a])=>(!a.class || a.class === s.characterClass) && (mode === 'inventory' ? s.ownedWearables.includes(id) : !a.source)).map(([id,a])=>`<article class="gear-card"><div class="gear-title">${icon(gearIcon(a.slot))}<h3>${label(a.name)}</h3></div><p>Lv. ${a.level} · +${a.defense} ${tr('защиты','defense')} · +${a.hp} HP${a.mana ? ` · +${a.mana} MP` : ''}${a.speed ? ` · +${a.speed} ${tr('скорости','speed')}` : ''}${a.crit ? ` · +${Math.round(a.crit*100)}% ${tr('крит','crit')}` : ''}</p>${s.equippedWearables[a.slot] !== id ? gearComparison('g', id) : ''}${s.equippedWearables[a.slot] === id ? `<span class="equipped-label">${icon('check')}${tr('Надето','Equipped')}</span>` : purchaseActions(id,a,'wear')}</article>`).join('')}</div>`;
 }
 function showActivities() {
   const a = game.save.activities;
@@ -715,7 +1070,7 @@ function weaponCards(mode = "inventory") {
           { ...s, equippedWeapon: id },
           classes[s.characterClass],
         );
-      return `<article class="gear-card ${equipped ? "equipped" : ""}"><div class="gear-title">${icon(w.icon)}<div><h3>${label(w.name)}</h3><small>${tr("УРОВЕНЬ", "LEVEL")} ${w.level || 1} · ${w.source ? tr("ТРОФЕЙ", "BOSS LOOT") : w.rarity ? tr("РЕДКОЕ", "RARE") : tr("ОБЫЧНОЕ", "COMMON")}</small></div></div><p>${label(w.desc)}</p><div class="gear-stats">${stats.damage} ${tr("урона", "damage")} · ${w.cooldown.toFixed(2)} ${tr("с", "s")} · ${Math.round(w.range / TILE)} ${tr("клеток", "tiles")}${w.element ? ` · ${tr("Стихия", "Element")}: ${label({ fire: ["Огонь", "Fire"], ice: ["Лёд", "Ice"], poison: ["Яд", "Poison"], lightning: ["Молния", "Lightning"], void: ["Тьма", "Void"] }[w.element])}` : ""}</div>${equipped ? `<span class="equipped-label">${icon("check")}${tr("В руках", "Equipped")}</span>` : purchaseActions(id,w,'weapon')}</article>`;
+      return `<article class="gear-card ${equipped ? "equipped" : ""}"><div class="gear-title">${icon(w.icon)}<div><h3>${label(w.name)}</h3><small>${tr("УРОВЕНЬ", "LEVEL")} ${w.level || 1} · ${w.rarity === "legendary" ? tr("ЛЕГЕНДАРНОЕ", "LEGENDARY") : w.source ? tr("ТРОФЕЙ", "BOSS LOOT") : w.rarity === "epic" ? tr("ЭПИЧЕСКОЕ", "EPIC") : w.rarity ? tr("РЕДКОЕ", "RARE") : tr("ОБЫЧНОЕ", "COMMON")}</small></div></div><p>${label(w.desc)}</p><div class="gear-stats">${stats.damage} ${tr("урона", "damage")} · ${w.cooldown.toFixed(2)} ${tr("с", "s")} · ${Math.round(w.range / TILE)} ${tr("клеток", "tiles")}${w.element ? ` · ${tr("Стихия", "Element")}: ${label(elementNames[w.element])}` : ""} · ${tr("крит", "crit")} ${Math.round(critChance(s, w) * 100)}%${w.lifesteal ? ` · ${tr("вампиризм", "life steal")} ${Math.round(w.lifesteal * 100)}%` : ""}${w.splash ? ` · ${tr("взрыв", "splash")}` : ""}</div>${equipped || locked ? "" : gearComparison("w", id)}${equipped ? `<span class="equipped-label">${icon("check")}${tr("В руках", "Equipped")}</span>` : purchaseActions(id,w,'weapon')}</article>`;
     })
     .join("")}</div>`;
 }
@@ -729,22 +1084,57 @@ function skillBenefit(a, rank) {
   if (effect === 'blink') return tr(`Дальность ${160+(rank-1)*20}`, `Range ${160+(rank-1)*20}`);
   return tr(`Сила ${Math.round(power*100)}%`, `Power ${Math.round(power*100)}%`);
 }
+let skillSel = null,
+  skillSchool = null;
+// Compact tile: icon, rank pips, cost and a quick learn button. Full details live in the side panel.
+function skillCard(a, bar) {
+  const s = game.save,
+    rank = abilityRank(s, a.id),
+    cfg = rankConfig(s, a, Math.max(1, rank)),
+    reason = game.acquisitionReason(a.id),
+    perks = rankPerks(a),
+    slot = bar.indexOf(a.id),
+    state = rank >= 3 ? "maxed" : rank ? "learned" : reason ? "unlearned" : "unlearned can-learn";
+  return `<article class="skill-card ${state} ${!reason && rank && rank < 3 ? "can-learn" : ""} ${skillSel === a.id ? "selected" : ""}" data-ability="${a.id}" data-action="skillSel-${a.id}" draggable="true"><div class="skill-node-icon" draggable="true" data-ability="${a.id}">${icon(a.icon)}${slot >= 0 ? `<kbd>${keyLabel(game.controls.bindings["skill" + (slot + 1)])}</kbd>` : ""}${rank < 3 ? `<button class="tile-learn ${reason ? "" : "ready"}" data-action="learn-${a.id}" ${reason ? "disabled" : ""} title="${reason || tr("Изучить · 1 очко", "Learn · 1 point")}">+</button>` : ""}</div><div class="skill-node-text"><b>${label(a.name)}</b><p class="skill-short">${label(a.desc)}</p><div class="skill-ranks">${[1, 2, 3].map((n) => `<i class="${rank >= n ? "filled" : ""}"></i>`).join("")}</div><div class="skill-costs"><span class="cost-mana">${icon("spark")}${a.cost}</span><span class="cost-level">${rank >= 3 ? tr("макс.", "max") : `${tr("ур.", "lv")} ${rankLevel(a, Math.min(3, rank + 1))}`}</span>${cfg.affinity ? `<span class="affinity">+15%</span>` : ""}</div></div><div class="tile-hidden"><ol class="rank-perks">${perks.map((p, i) => `<li class="${rank === i + 1 ? "current" : rank > i ? "done" : ""}">${label(p)}</li>`).join("")}</ol>${reason && rank < 3 ? `<p class="skill-status missing">${reason}</p>` : ""}</div></article>`;
+}
+function skillDetail(a, bar) {
+  if (!a) return "";
+  const s = game.save,
+    rank = abilityRank(s, a.id),
+    cfg = rankConfig(s, a, Math.max(1, rank)),
+    reason = game.acquisitionReason(a.id),
+    perks = rankPerks(a);
+  return `<aside class="skill-detail"><div class="skill-detail-head"><span class="detail-icon">${icon(a.icon)}</span><div><h3>${label(a.name)}</h3><small>${label((disciplines[schoolOf(a.id)] || { name: ["Общее", "Utility"] }).name)}</small></div></div><div class="detail-costs"><span>${icon("spark")}${a.cost} ${tr("энергии", "energy")}</span><span>${icon("reset")}${cfg.cooldown.toFixed(1)} ${tr("с", "s")}</span>${cfg.affinity ? `<span class="affinity">+15% ${tr("от оружия", "weapon")}</span>` : ""}</div><p>${label(a.desc)}</p><ol class="detail-perks">${perks.map((p, i) => `<li class="${rank === i + 1 ? "current" : rank > i ? "done" : ""}"><b>${["I", "II", "III"][i]}</b><span>${label(p)}</span><small>${tr("ур.", "lv")} ${rankLevel(a, i + 1)}</small></li>`).join("")}</ol>${rank < 3 ? `<button class="button ${reason ? "secondary" : "primary"}" data-action="learnSel" ${reason ? "disabled" : ""}>${rank ? tr(`Усилить до ранга ${["I", "II", "III"][rank]} · 1 очко`, `Upgrade to rank ${["I", "II", "III"][rank]} · 1 point`) : tr("Изучить · 1 очко", "Learn · 1 point")}</button>` : `<p class="detail-max">${tr("Максимальный ранг", "Maximum rank")}</p>`}${reason && rank < 3 ? `<p class="detail-reason">${reason}</p>` : ""}<div class="detail-slots"><small>${tr("Поставить на клавишу:", "Put on key:")}</small>${[0, 1, 2, 3, 4].map((n) => `<button data-action="assign-${a.id}-${n}" class="${bar[n] === a.id ? "active" : ""}">${keyLabel(game.controls.bindings["skill" + (n + 1)])}</button>`).join("")}</div></aside>`;
+}
 function showSkills() {
-  const s=game.save, profile=disciplines[weaponDiscipline(s)], bar=barFor(s);
-  openModal(tr('Книга умений','Skill book'), `<div class="skills-intro"><div><p>${label(classes[s.characterClass].name)} · ${label(profile.name)}</p><span>${tr('Первое изучение открывает приём. Усиление требует только уровня героя и одного очка. Очки получаете при повышении уровня.','First learning unlocks an ability. Upgrades require only hero level and one point. Gain points by leveling up.')}</span></div><strong>${s.skillPoints}<small>${tr('ОЧКОВ','POINTS')}</small></strong></div>
-  <p class="skill-rules">${tr('Ранг II: начальный уровень приёма +2. Ранг III: +5. Обучение у наставника, манускрипт и материалы оплачиваются только при первом изучении.','Rank II: ability starting level +2. Rank III: +5. Mentor training, manuscripts and materials are paid only on first learning.')}</p>
-  <div class="ability-bar-editor">${bar.map((id,i) => `<button class="bar-edit-slot" data-bar-slot="${i}" data-action="barRotate-${i}" draggable="true"><kbd>${keyLabel(game.controls.bindings['skill'+(i+1)])}</kbd>${icon(skillConfig(s,i).icon)}<span>${label(skillConfig(s,i).name)}</span></button>`).join('')}</div>
-  <div class="skill-tree">${skillsFor(s).map((a,i) => {
-    const rank=abilityRank(s,a.id), reason=game.acquisitionReason(a.id), cd=n => (a.cooldown-Math.max(0,n-1)*.5).toFixed(1),
-      source={practice:tr(`Освоить школу: ${Math.min(8,s.weaponPractice[weaponDiscipline(s)] || 0)}/8 попаданий обычной атакой`, `Learn school: ${Math.min(8,s.weaponPractice[weaponDiscipline(s)] || 0)}/8 basic attack hits`), mentor:tr('Первое изучение: наставник класса в деревне · 60 монет','First learning: class mentor in the village · 60 coins'), tome:tr('Первое изучение: 1 манускрипт вашего класса. Тайники, данжи или редкий улов.','First learning: 1 manuscript for your class. Chests, dungeons or rare catches.'), quest:tr('Первое изучение: выполните личное задание из описания.','First learning: complete the personal quest in the description.'), ritual:tr('Первое изучение: у костра · 3 кристалла + 1 эссенция.','First learning: at camp · 3 crystals + 1 essence.')}[a.source];
-    return `<article class="skill-node ${rank ? 'unlocked' : 'locked'}" draggable="true" data-ability="${a.id}"><div class="skill-node-icon" draggable="true" data-ability="${a.id}" title="${tr('Перетащите значок на панель','Drag icon onto the bar')}">${icon(a.icon)}</div><div class="skill-node-main"><div class="skill-node-top"><h3>${label(a.name)}</h3><kbd>${keyLabel(game.controls.bindings['skill'+(bar.indexOf(a.id)+1)])}</kbd></div><p>${label(a.desc)}</p><div class="skill-ranks">${[1,2,3].map(n=>`<i class="${rank >= n ? 'filled' : ''}"></i>`).join('')}<span>${rank ? tr('Изучено · ранг ','Learned · rank ')+rank+'/3' : tr('Ещё не изучено','Not learned yet')}</span></div>
-    ${rank ? `<div class="skill-current">${skillBenefit(a,rank)} · ${a.cost} ${tr('энергии','energy')} · ${tr('откат','cooldown')} ${cd(rank)} ${tr('с','s')}</div>` : `<p class="skill-source">${source}</p>`}
-    ${rank < 3 ? `<div class="skill-preview"><b>${tr('Следующий ранг','Next rank')} ${rank+1} · Lv. ${rankLevel(a,rank+1)}</b><span>${rank ? skillBenefit(a,rank)+' → ' : ''}${skillBenefit(a,rank+1)} · ${tr('откат','cooldown')} ${rank ? cd(rank)+' → ' : ''}${cd(rank+1)} ${tr('с','s')}</span></div>` : ''}
-    <p class="skill-status ${reason && rank < 3 ? 'missing' : 'enough'}">${reason || (rank ? tr('Можно усилить · 1 очко','Upgrade available · 1 point') : tr('Можно изучить · 1 очко','Learning available · 1 point'))}</p>
-    <div class="skill-placement"><small>${tr('Ячейка панели:','Bar slot:')}</small>${[0,1,2,3,4].map(n=>`<button data-action="assign-${a.id}-${n}" aria-label="${tr('Назначить на ','Assign to ')}${keyLabel(game.controls.bindings['skill'+(n+1)])}" class="${bar[n]===a.id ? 'active' : ''}">${keyLabel(game.controls.bindings['skill'+(n+1)])}</button>`).join('')}</div>
-    ${!rank && a.source === 'mentor' && !s.activeDungeon ? btn(tr('Показать наставника на карте','Show mentor on map'),'locateMentor','secondary','map') : ''}</div>
-    <button class="button ${reason ? 'secondary' : 'primary'} skill-learn" data-action="learn-${i}" ${reason ? 'disabled' : ''}>${rank>=3 ? tr('Максимум','Maximum') : rank ? tr('Усилить до ранга '+(rank+1)+' · 1 очко','Upgrade to rank '+(rank+1)+' · 1 point') : tr('Изучить · 1 очко','Learn · 1 point')}</button></article>`;
-  }).join('')}</div><div class="guide-note"><p>${tr('Ранги одной школы сохраняются при смене оружия. Клинки следопыта дают невидимость, лук — залп, арбалет — пробитие. Перетащите значок умения на панель, чтобы сменить клавишу.','School ranks persist when switching weapons. Ranger blades grant invisibility, bows grant volleys, crossbows grant piercing shots. Drag an ability icon onto the bar to change its key.')}</p></div>${masteriesPanel()}`, 'skills');
+  const s = game.save,
+    bar = barFor(s),
+    weaponSchool = s.equippedWeapon ? weaponDiscipline(s) : null,
+    mentor = landmarks.find((o) => o.id === trainerIds[s.characterClass]),
+    nearMentor = !s.activeDungeon && mentor && Math.hypot(s.x - mentor.x, s.y - mentor.y) < 90,
+    spent = Object.values(s.abilityRanks).reduce((n, r) => n + r, 0),
+    schools = [
+      ...Object.entries(disciplines).filter(([, d]) => d.class === s.characterClass),
+      ["utility", { name: ["Общие умения класса", "Class utilities"], ids: utilitySkills[s.characterClass] }],
+    ];
+  if (!skillSel || abilityCatalog[skillSel]?.class !== s.characterClass) skillSel = bar[0];
+  if (!schools.some(([k]) => k === skillSchool)) skillSchool = (weaponSchool && schools.some(([k]) => k === weaponSchool) ? weaponSchool : schools[0][0]);
+  const [schoolKey, school] = schools.find(([k]) => k === skillSchool),
+    learned = (d) => d.ids.filter((id) => abilityRank(s, id) > 0).length;
+  openModal(
+    tr("Книга умений", "Skill book"),
+    `<div class="skills-intro sb-head"><div class="sb-crest">${icon(classes[s.characterClass].icon || "spark")}</div><div><p>${label(classes[s.characterClass].name)} · ${tr("уровень", "level")} ${s.level}</p><span>${tr("Выберите школу слева. Умения работают с любым оружием; одно очко — изучить или усилить. Оружие своей школы даёт +15%.", "Pick a school on the left. Abilities work with any weapon; one point learns or upgrades. A weapon of the same school adds +15%.")}</span></div><strong class="${s.skillPoints ? "has-points" : ""}">${s.skillPoints}<small>${tr("ОЧКОВ", "POINTS")}</small></strong></div>
+  <div class="sb2 skill-layout"><nav class="sb-schools">${schools
+    .map(([key, d]) => {
+      const first = abilityCatalog[d.ids[0]];
+      return `<button class="sb-school-tab ${key === schoolKey ? "active" : ""} ${key === weaponSchool ? "affine" : ""}" data-action="skillSchool-${key}"><span class="sb-tab-icon">${icon(first.icon)}</span><span class="sb-tab-text"><b>${label(d.name)}</b><small>${learned(d)} / ${d.ids.length} ${tr("изучено", "learned")}${key === weaponSchool ? " · +15%" : ""}</small></span></button>`;
+    })
+    .join("")}</nav>
+  <section class="sb-center"><div class="skill-school"><h3 class="school-title"><span>${label(school.name)}</span>${schoolKey === weaponSchool ? `<span class="affinity">${tr("школа оружия · +15%", "weapon school · +15%")}</span>` : ""}</h3><div class="skill-grid sb-path">${school.ids.map((id, i) => `<div class="sb-step"><span class="sb-step-num">${["I", "II", "III", "IV"][i]}</span>${skillCard(abilityCatalog[id], bar)}</div>`).join("")}</div></div>
+  ${nearMentor ? `<div class="vendor-upgrade">${icon("reset")}<span><b>${tr("Забыть умения", "Reset abilities")}</b><small>${tr(`Вернуть ${spent} очк. · ${RESPEC_COST} монет`, `Return ${spent} points · ${RESPEC_COST} coins`)}</small></span><button class="button secondary" data-action="respec" ${!spent || s.gold < RESPEC_COST ? "disabled" : ""}>${tr("Сбросить", "Reset")}</button></div>` : ""}
+  ${masteriesPanel()}</section><div class="sb-side"><div class="sb-bar"><span class="sb-bar-title">${tr("Панель умений", "Ability bar")}<small>${tr("Перетащите умение на ячейку или нажмите ячейку, чтобы сдвинуть", "Drag an ability onto a slot, or click a slot to shift it")}</small></span><div class="ability-bar-editor">${bar.map((id, i) => { const c = skillConfig(s, i); return `<button class="bar-edit-slot ${c.rank ? "" : "locked"}" data-bar-slot="${i}" data-action="barRotate-${i}" draggable="true" title="${label(c.name)}"><kbd>${keyLabel(game.controls.bindings["skill" + (i + 1)])}</kbd>${icon(c.icon)}<em>${c.cost}</em></button>`; }).join("")}</div></div>${skillDetail(abilityCatalog[skillSel], bar)}</div></div>`,
+    "skills",
+  );
 }
 let bindingAwait = null;
 function showControls() {
@@ -853,16 +1243,18 @@ let mapState = { zoom: 1, x: (WIDTH * TILE) / 2, y: (HEIGHT * TILE) / 2 },
 function mapDimensions() {
   return game.world.bounds || { width: WIDTH, height: HEIGHT };
 }
+// Uniform scale keeps the valley's proportions; the map is centred when it does not fill the canvas.
 function mapTransform(canvas, large) {
   const { width, height } = mapDimensions();
   const zoom = large ? mapState.zoom : 1,
-    sx = (canvas.width / (width * TILE)) * zoom,
-    sy = (canvas.height / (height * TILE)) * zoom;
+    scale = Math.min(canvas.width / (width * TILE), canvas.height / (height * TILE)) * zoom,
+    viewW = canvas.width / scale,
+    viewH = canvas.height / scale;
   return {
-    sx,
-    sy,
-    ox: large ? mapState.x - canvas.width / (2 * sx) : 0,
-    oy: large ? mapState.y - canvas.height / (2 * sy) : 0,
+    sx: scale,
+    sy: scale,
+    ox: large ? mapState.x - viewW / 2 : (width * TILE - viewW) / 2,
+    oy: large ? mapState.y - viewH / 2 : (height * TILE - viewH) / 2,
   };
 }
 function drawMap(canvas, large) {
@@ -871,142 +1263,95 @@ function drawMap(canvas, large) {
     w = canvas.width,
     h = canvas.height,
     s = game.save,
-    { sx, sy, ox, oy } = mapTransform(canvas, large);
+    { sx, sy, ox, oy } = mapTransform(canvas, large),
+    overworld = !s.activeDungeon && !s.interior,
+    discovered = s.discovered;
   c.imageSmoothingEnabled = false;
-  c.fillStyle = "#19382c";
+  c.fillStyle = "#14100c";
   c.fillRect(0, 0, w, h);
   c.save();
   c.translate(-ox * sx, -oy * sy);
-  const { width, height } = mapDimensions();
-  c.drawImage(
-    game.terrain.overview,
-    0,
-    0,
-    width * 4,
-    height * 4,
-    0,
-    0,
-    width * TILE * sx,
-    height * TILE * sy,
-  );
-  c.fillStyle = "#314f3d25";
-  c.fillRect(0, 0, width * TILE * sx, height * TILE * sy);
-  for (const o of game.world.objects)
-    if (o.type === "house") {
-      c.fillStyle = "#dac199";
-      c.fillRect(o.x * sx - 3, o.y * sy - 2, 6, 4);
+  const { width, height } = mapDimensions(),
+    mw = width * TILE * sx,
+    mh = height * TILE * sy;
+  c.drawImage(overworld ? worldOverview(game.world, game.season || "spring") : game.terrain.overview, 0, 0, mw, mh);
+  if (overworld) c.drawImage(fogOverlay(discovered), 0, 0, mw, mh);
+  else
+    for (const o of game.world.objects)
+      if (["stairs", "exit", "dungeonChest"].includes(o.type))
+        drawMapIcon(c, o.type === "dungeonChest" ? "coin" : o.type === "stairs" ? "arrow" : "home", o.x * sx, o.y * sy, large ? 16 : 8);
+  const size = large ? 20 : 8,
+    seen = (o) => !overworld || isDiscovered(discovered, o.x, o.y);
+  c.font = `${large ? 15 : 10}px Tiny5, monospace`;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  const place = labelPlacer(c);
+  if (overworld) {
+    for (const o of landmarks) {
+      if (!seen(o)) continue;
+      const x = o.x * sx,
+        y = o.y * sy;
+      if (o.type === "entrance") drawMapIcon(c, { crypt: "skull", mine: "ore", abyss: "leaf", citadel: "crystal" }[o.dungeon], x, y, size, dungeons[o.dungeon].color);
+      else if (o.type === "camp") drawMapIcon(c, s.visitedCamps.includes(o.id) ? "sun" : "lock", x, y, large ? 16 : 7);
+      else if (large && o.type === "fishspot") drawMapIcon(c, "fish", x, y, 16);
+      else if (large && o.type === "trainer" && o.characterClass === s.characterClass) drawMapIcon(c, "book", x, y, 16, "#f2c14e");
     }
-  if (large && !s.activeDungeon) {
-    const labels = [
-      ["village", 24, 61],
-      ["forest", 44, 42],
-      ["mountain", 85, 16],
-      ["outpost", 73, 35],
-      ["ruins", 91, 68],
-      ["lake", 50, 73],
-      ["amberwood", 139, 36],
-      ["marsh", 146, 63],
-      ["harbor", 141, 84],
-      ["coast", 92, 115],
-      ["tundra", 213, 20],
-      ["highlands", 226, 65],
-      ["deadwood", 220, 100],
-      ["frontier", 190, 151],
-      ["badlands", 230, 155],
-      ["island", 66, 176],
-    ];
-    c.font = "11px system-ui";
-    c.textAlign = "center";
-    for (const [key, x, y] of labels) {
-      const text = label(regions[key]),
-        tw = c.measureText(text).width;
-      c.fillStyle = "#172e25cb";
-      c.fillRect(x * TILE * sx - tw / 2 - 6, y * TILE * sy - 20, tw + 12, 19);
-      c.fillStyle = "#f2e4c6";
-      c.fillText(text, x * TILE * sx, y * TILE * sy - 7);
+    for (const e of game.enemies.filter(
+      (e) =>
+        e.hp > 0 &&
+        (e.type === "herald" || e.type === "eclipse" || (large && e.worldBoss && isDiscovered(discovered, e.x, e.y))),
+    ))
+      drawMapIcon(c, e.worldBoss ? "crown" : "essence", e.x * sx, e.y * sy, size, e.worldBoss ? "#ff6a4a" : "#c9a8ff");
+    if (large) {
+      const labels = [
+        ["village", 24, 61], ["forest", 44, 42], ["mountain", 85, 16], ["outpost", 73, 35],
+        ["ruins", 91, 68], ["lake", 50, 73], ["amberwood", 139, 36], ["marsh", 146, 63],
+        ["harbor", 141, 84], ["coast", 92, 115], ["tundra", 213, 20], ["highlands", 226, 65],
+        ["deadwood", 220, 100], ["frontier", 190, 151], ["badlands", 230, 155], ["island", 66, 176],
+        ["meadow", 30, 14],
+      ];
+      for (const [key, x, y] of labels)
+        place(discovered.includes(key) ? label(regions[key]) : "???", x * TILE * sx, y * TILE * sy - 14, discovered.includes(key) ? "#f2e4c6" : "#8a7a60");
+      for (const o of landmarks.filter((o) => o.type === "entrance" && seen(o)))
+        place(label(dungeons[o.dungeon].name), o.x * sx, o.y * sy + 16, dungeons[o.dungeon].color);
+      for (const e of game.enemies.filter((e) => e.hp > 0 && e.worldBoss && isDiscovered(discovered, e.x, e.y)))
+        place(label(bossNames[e.type]), e.x * sx, e.y * sy + 16, "#ffb09a");
     }
   }
-  if (!s.activeDungeon)
-    for (const portal of landmarks.filter((o) => o.type === "entrance")) {
-      c.fillStyle = dungeons[portal.dungeon].color;
-      c.beginPath();
-      c.arc(portal.x * sx, portal.y * sy, large ? 5 : 3, 0, Math.PI * 2);
-      c.fill();
-      if (large) {
-        c.font = "10px system-ui";
-        c.textAlign = "center";
-        c.fillStyle = "#f5e8d0";
-        c.fillText(
-          label(dungeons[portal.dungeon].name),
-          portal.x * sx,
-          portal.y * sy + 17,
-        );
-      }
-    }
-  if (large && !s.activeDungeon)
-    for (const o of landmarks.filter((o) =>
-      ["fishspot", "trainer"].includes(o.type),
-    )) {
-      c.fillStyle = o.type === "fishspot" ? "#94d0df" : "#d3b77f";
-      c.beginPath();
-      c.arc(o.x * sx, o.y * sy, 4, 0, Math.PI * 2);
-      c.fill();
-      c.font = "10px system-ui";
-      c.textAlign = "center";
-      if (o.type === "fishspot" || o.id === "bladeMentor")
-        c.fillText(
-          o.type === "fishspot"
-            ? tr("Рыбалка", "Fishing")
-            : tr("Наставники", "Mentors"),
-          o.x * sx,
-          o.y * sy + 14,
-        );
-    }
-  if (large && s && !s.activeDungeon)
-    for (const camp of landmarks.filter((o) => o.type === "camp")) {
-      const unlocked = s.visitedCamps.includes(camp.id);
-      c.fillStyle = unlocked ? "#e6c985" : "#536e60";
-      c.fillRect(camp.x * sx - 4, camp.y * sy - 4, 8, 8);
-      c.strokeStyle = "#193d2c";
-      c.strokeRect(camp.x * sx - 4, camp.y * sy - 4, 8, 8);
-    }
-  if (s.activeDungeon)
-    for (const o of game.world.objects.filter((o) =>
-      ["stairs", "exit", "dungeonChest"].includes(o.type),
-    )) {
-      c.fillStyle = o.type === "dungeonChest" ? "#bdb18b" : "#9ee4e8";
-      c.fillRect(o.x * sx - 3, o.y * sy - 3, 6, 6);
-      if (large && o.type !== "dungeonChest") {
-        c.fillStyle = "#d9e8d3";
-        c.font = "10px system-ui";
-        c.textAlign = "center";
-        c.fillText(
-          o.type === "stairs" ? tr("Лестница", "Stairs") : tr("Выход", "Exit"),
-          o.x * sx,
-          o.y * sy + 15,
-        );
-      }
-    }
   const goal = s && objectiveTarget(game);
-  for (const [p, color, radius] of [
-    [goal, "#f9d67f", large ? 5 : 3],
-    [s, "#ffefc9", large ? 5 : 3],
-    [game.waypoint, "#9ee4e8", large ? 6 : 3],
-  ])
-    if (p) {
-      c.fillStyle = color;
-      c.beginPath();
-      c.arc(p.x * sx, p.y * sy, radius, 0, Math.PI * 2);
-      c.fill();
-      c.strokeStyle = "#233e31";
-      c.lineWidth = 2;
-      c.stroke();
-    }
+  if (goal) drawMapIcon(c, "flag", goal.x * sx, goal.y * sy, size, "#f9d67f");
+  if (game.waypoint) drawMapIcon(c, "target", game.waypoint.x * sx, game.waypoint.y * sy, size);
+  // The hero is an arrow pointing where they face.
+  const a = game.facing ?? Math.PI / 2,
+    px = s.x * sx,
+    py = s.y * sy,
+    r = large ? 9 : 6;
+  c.fillStyle = "#0b0806";
+  c.beginPath();
+  c.arc(px, py, r + 2, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "#ffe08a";
+  c.beginPath();
+  c.moveTo(px + Math.cos(a) * r, py + Math.sin(a) * r);
+  c.lineTo(px + Math.cos(a + 2.5) * r, py + Math.sin(a + 2.5) * r);
+  c.lineTo(px + Math.cos(a + Math.PI) * r * 0.3, py + Math.sin(a + Math.PI) * r * 0.3);
+  c.lineTo(px + Math.cos(a - 2.5) * r, py + Math.sin(a - 2.5) * r);
+  c.closePath();
+  c.fill();
   c.restore();
+  // Parchment frame.
+  c.strokeStyle = "#5b4527";
+  c.lineWidth = large ? 4 : 2;
+  c.strokeRect(0, 0, w, h);
   if (large) {
     const zoomLabel = document.querySelector("#map-zoom-value");
-    if (zoomLabel)
-      zoomLabel.textContent = Math.round(mapState.zoom * 100) + "%";
+    if (zoomLabel) zoomLabel.textContent = Math.round(mapState.zoom * 100) + "%";
+    const travel = document.querySelector("#map-travel"),
+      campTarget = mapState.camp && landmarks.find((o) => o.id === mapState.camp);
+    if (travel) {
+      travel.hidden = !campTarget;
+      if (campTarget) travel.lastChild.textContent = tr(`Переместиться: ${label(campTarget.name)}`, `Travel: ${label(campTarget.name)}`);
+    }
     const marker = document.querySelector("#map-marker-label");
     if (marker)
       marker.textContent = game.waypoint
@@ -1027,7 +1372,7 @@ function showMap() {
     game.save.activeDungeon
       ? label(dungeons[game.save.activeDungeon.id].name)
       : tr("Карта забытой долины", "Map of the forgotten valley"),
-    `<div class="map-controls"><span>${width} × ${height} ${tr("клеток", "tiles")}</span><div><button class="icon-button" data-action="mapZoomOut" aria-label="${tr("Уменьшить карту", "Zoom out")}">${icon("minus")}</button><b id="map-zoom-value">100%</b><button class="icon-button" data-action="mapZoomIn" aria-label="${tr("Увеличить карту", "Zoom in")}">${icon("plus")}</button><button class="icon-button" data-action="mapCenter" aria-label="${tr("Найти героя", "Find your hero")}">${icon("target")}</button></div></div><div class="map-wrap"><canvas id="large-map" width="860" height="680"></canvas><span class="map-north">N<br>↑</span></div><div class="map-route"><span id="map-marker-label"></span>${btn(tr("Идти к отметке", "Walk to marker"), "mapWalk", "secondary", "flag")}</div><div class="map-camps" ${game.save.activeDungeon ? "hidden" : ""}><span>${tr("БЫСТРОЕ ПЕРЕМЕЩЕНИЕ · ОТКРОЙТЕ КОСТРЫ", "FAST TRAVEL · DISCOVER CAMPFIRES")}</span><div>${landmarks
+    `<div class="map-controls"><span>${width} × ${height} ${tr("клеток", "tiles")}</span><div><button class="icon-button" data-action="mapZoomOut" aria-label="${tr("Уменьшить карту", "Zoom out")}">${icon("minus")}</button><b id="map-zoom-value">100%</b><button class="icon-button" data-action="mapZoomIn" aria-label="${tr("Увеличить карту", "Zoom in")}">${icon("plus")}</button><button class="icon-button" data-action="mapCenter" aria-label="${tr("Найти героя", "Find your hero")}">${icon("target")}</button></div></div><div class="map-wrap"><canvas id="large-map" width="864" height="648"></canvas><span class="map-north">N<br>↑</span></div><div class="map-route"><span id="map-marker-label"></span><div class="gear-actions"><button class="button primary" data-action="mapTravel" id="map-travel" hidden>${icon("sun")}${tr("Переместиться к костру", "Travel to campfire")}</button>${btn(tr("Идти к отметке", "Walk to marker"), "mapWalk", "secondary", "flag")}</div></div><div class="map-camps" ${game.save.activeDungeon ? "hidden" : ""}><span>${tr("БЫСТРОЕ ПЕРЕМЕЩЕНИЕ · НАЖМИТЕ НА КОСТЁР НА КАРТЕ ИЛИ НИЖЕ", "FAST TRAVEL · CLICK A CAMPFIRE ON THE MAP OR BELOW")}</span><div>${landmarks
       .filter((o) => o.type === "camp" && !game.save.activeDungeon)
       .map(
         (camp) =>
@@ -1035,7 +1380,7 @@ function showMap() {
       )
       .join(
         "",
-      )}</div></div><div class="map-legend"><span><i class="map-dot player-dot"></i>${tr("Ваш герой", "Your hero")}</span><span><i class="map-dot goal-dot"></i>${tr("Текущая цель", "Current objective")}</span><span><i class="map-dot" style="background:#9ee4e8"></i>${tr("Ваша отметка", "Your marker")}</span></div>`,
+      )}</div></div><div class="map-legend">${[["arrow", tr("Ваш герой", "Your hero")], ["flag", tr("Цель задания", "Objective")], ["target", tr("Ваша отметка", "Your marker")], ["skull", tr("Подземелье", "Dungeon")], ["sun", tr("Костёр", "Campfire")], ["crown", tr("Мировой босс", "World boss")], ["fish", tr("Рыбалка", "Fishing")], ["book", tr("Ваш наставник", "Your mentor")]].map(([i, t]) => `<span>${icon(i)}${t}</span>`).join("")}<span class="fog-key"></span>${tr("Неисследованные земли", "Unexplored lands")}</div>`,
     "world-map",
   );
   drawMap(document.querySelector("#large-map"), true);
@@ -1072,8 +1417,124 @@ function showVictory() {
     "victory",
   );
 }
+function showEclipseVictory() {
+  openModal(
+    tr("Затмение рассеялось", "The eclipse has passed"),
+    `<div class="victory-symbol dawn">${icon("sun")}</div><p class="modal-intro">${tr("Нерей Бессветный рассыпался тысячей искр. Над руинами впервые за столетие взошло солнце, и Сердце долины засияло ровным золотым светом. На земле лежат реликвии рассвета — заберите их и вернитесь к Оливеру.", "Nerei the Lightless broke into a thousand sparks. For the first time in a century the sun rose over the ruins, and the Heart of the valley glows a steady gold. The relics of dawn lie on the ground — take them and return to Oliver.")}</p>${btn(tr("Забрать реликвии", "Collect the relics"), "close", "primary", "arrow")}`,
+    "victory",
+  );
+}
+function showEnding() {
+  const s = game.save,
+    kind = s.flags.reconciled ? "peace" : s.flags.duskPower ? "dusk" : "dawn",
+    fates = fateLines(s);
+  const text = {
+    peace: tr(`Так закончилась история ${escapeHTML(s.name)}, Примирителя братьев. Вы не развеяли осколки и не оставили их себе — вы отпустили душу Нерея туда, где его ждал Ардан. Обелиски гаснут один за другим: держать больше некого. Долина впервые за сто лет живёт без замков.`, `So ends the tale of ${escapeHTML(s.name)}, Reconciler of brothers. You neither scattered the shards nor kept them — you released Nerei's soul to where Ardan waited. One by one the obelisks go dark: there is no one left to hold. For the first time in a century the valley lives without locks.`),
+    dusk: tr(`Так закончилась история ${escapeHTML(s.name)}, Повелителя сумерек. Осколки затмения слились со Знаком Рассвета, и на ладони теперь горит серое пламя. Обелиски светят, но старый Оливер больше не смотрит вам в глаза. У костров шепчутся: не стал ли новый хранитель вторым Нереем?`, `So ends the tale of ${escapeHTML(s.name)}, Lord of Dusk. The eclipse shards fused with the Mark of Dawn and a grey flame now burns on your palm. The obelisks shine, but old Oliver no longer meets your eyes. By the fires they whisper: has the new guardian become a second Nerei?`),
+    dawn: tr(`Так закончилась история ${escapeHTML(s.name)}, Хранителя рассвета. Вы развеяли осколки, и Знак на ладони засиял чистым золотом, как у Ардана. Обелиски горят, печати глубин целы, а тени ушли за горизонт. В Лиственной деревне у костра теперь рассказывают новую легенду — вашу.`, `So ends the tale of ${escapeHTML(s.name)}, Keeper of Dawn. You scattered the shards and the Mark shone pure gold, as Ardan's once did. The obelisks burn, the depth seals hold and the shadows have fled. By the Leafhaven campfire they now tell a new legend — yours.`),
+  }[kind];
+  openModal(
+    tr("Хроники забытой долины", "Chronicles of the Forgotten Valley"),
+    `<div class="ending"><div class="victory-symbol ${kind === "dusk" ? "" : "dawn"}">${icon(kind === "dusk" ? "moon" : kind === "peace" ? "heart" : "crown")}</div><p class="modal-intro">${text}</p>${fates.length ? `<h3 class="small-heading">${tr("СУДЬБЫ", "FATES")}</h3><ul class="fate-list">${fates.map((f) => `<li>${escapeHTML(f)}</li>`).join("")}</ul>` : ""}<div class="journal-stats"><span>${tr("Уровень", "Level")}<b>${s.level}</b></span><span>${tr("Время в долине", "Time in the valley")}<b>${Math.floor(s.playtime / 60)} ${tr("мин", "min")}</b></span><span>${tr("Сундуков", "Chests")}<b>${s.collected.filter((x) => x.startsWith("chest")).length} / ${CHEST_COUNT}</b></span><span>${tr("Земель открыто", "Lands found")}<b>${s.discovered.length} / ${Object.keys(regions).length}</b></span><span>${tr("Врагов побеждено", "Foes defeated")}<b>${Object.values(s.kills).reduce((a, b) => a + b, 0)}</b></span></div><p class="fine-print">${tr("Мир остаётся открытым: подземелья можно проходить на всё более сложных испытаниях, а в журнале появились задачи эпилога.", "The world stays open: dungeons can be cleared at ever harder challenges, and the journal lists epilogue goals.")}</p></div>${btn(tr("Продолжить путешествие", "Continue your journey"), "close", "primary", "arrow")}`,
+    "victory",
+  );
+}
+function chapterLabel(q) {
+  return q <= 2
+    ? tr("Глава I · Обелиски", "Chapter I · The obelisks")
+    : q <= 6
+      ? tr("Глава II · Хранитель", "Chapter II · The guardian")
+      : q === 7
+        ? tr("Глава III · Печати глубин", "Chapter III · Depth seals")
+        : q <= 10
+          ? tr("Глава IV · Затмение", "Chapter IV · The eclipse")
+          : tr("Эпилог", "Epilogue");
+}
+let lastKeeper = null;
+const rumors = [
+  ["Говорят, Древень Мшистый бродит в Янтарной роще. Его корни вылезают прямо из земли — не стойте на линии!", "They say Mossbark roams Amberwood. Its roots burst from the ground — don't stand in line!"],
+  ["Песчаный червь на острове зарывается и выныривает под ногами. Двигайтесь, когда земля дрожит.", "The sand worm on the isle burrows and bursts out underfoot. Move when the ground shakes."],
+  ["Атаман Кривой Клык держит Пепельные пустоши. Его сапоги, говорят, лёгкие как перо.", "Crookfang rules the Ashen Badlands. His boots are said to be light as a feather."],
+  ["Ледяной вирм кружит над тундрой. Огонь против него хорош, но холод бьёт больно.", "The frost wyrm circles the tundra. Fire works well, but its frost hurts."],
+  ["Ведьма Мора на болотах оставляет ядовитые лужи. Не задерживайтесь в зелёном.", "Mora the witch leaves poison pools in the marshes. Don't linger in the green."],
+  ["Циклоп Гром на нагорье стреляет лучом из глаза. Уходите вбок, а не назад.", "Thunderhide the cyclops fires an eye beam. Step sideways, not back."],
+  ["Осенью враги роняют больше золота, а весной быстрее учишься.", "In autumn enemies drop more gold, and in spring you learn faster."],
+];
+function showKeeper(o = lastKeeper) {
+  if (!o) return;
+  lastKeeper = o;
+  const s = game.save,
+    def = interiorDefs[o.house];
+  if (def.kind === "forge") {
+    dialog(o, tr("Мастер Брам у горна снаружи, но я принимаю заказы. Что сковать?", "Master Bram works the forge outside, but I take orders. What shall we make?"), btn(tr("Открыть мастерскую", "Open the workshop"), "openSmith", "primary", "mace") + btn(tr("До встречи", "Goodbye"), "close", "secondary"));
+    return;
+  }
+  if (def.kind === "home") {
+    dialog(o, label(def.line), btn(tr("Спасибо", "Thanks"), "close", "primary", "arrow"));
+    return;
+  }
+  const row = (k, price, actions) =>
+    `<div class="shop-row"><span>${icon(itemIcon(k))}<b>${label(items[k])}</b><small>${price} ◈ · ${tr("в рюкзаке", "in bag")}: ${s.inventory[k] || 0}</small></span><div class="gear-actions">${actions}</div></div>`;
+  if (def.kind === "tavern") {
+    const told = storyRumors(game.save),
+      rumor = told.length && Math.floor(game.time / 20) % 2 === 0 ? told[Math.floor(game.time / 40) % told.length] : rumors[Math.floor(game.time / 20) % rumors.length];
+    const mood = villagerMood(game.save);
+    dialog(
+      o,
+      (mood ? label(mood) + " " : "") + label(rumor),
+      btn(tr("До встречи", "Goodbye"), "close", "secondary"),
+      `<h3 class="small-heading">${tr("МЕНЮ", "MENU")}</h3>${Object.entries(tavernMenu)
+        .map(([k, p]) => row(k, p, `<button class="button secondary" data-action="trade-buy-${k}-1" ${s.gold < p ? "disabled" : ""}>${tr("Купить", "Buy")}</button>`))
+        .join("")}<div class="shop-row"><span>${icon("moon")}<b>${tr("Комната до утра", "A room until morning")}</b><small>${ROOM_PRICE} ◈ · ${tr("полное восстановление, время до 8:00", "full recovery, time skips to 8:00")}</small></span><button class="button primary" data-action="innRest" ${s.gold < ROOM_PRICE ? "disabled" : ""}>${tr("Снять", "Rent")}</button></div>`,
+    );
+    return;
+  }
+  const owned = [
+    ...s.ownedWeapons.filter((id) => id !== s.equippedWeapon).map((id) => ["weapon", id, weapons[id]]),
+    ...s.ownedArmors.filter((id) => id !== "none" && id !== s.equippedArmor).map((id) => ["armor", id, armors[id]]),
+    ...s.ownedWearables.filter((id) => !Object.values(s.equippedWearables).includes(id)).map((id) => ["wear", id, wearables[id]]),
+  ];
+  dialog(
+    o,
+    tr("Покупаю материалы и ненужное снаряжение, продаю припасы. Надетые вещи не беру.", "I buy materials and spare gear and sell supplies. I won't take what you're wearing."),
+    btn(tr("До встречи", "Goodbye"), "close", "secondary"),
+    `<h3 class="small-heading">${tr("ПРОДАТЬ МАТЕРИАЛЫ", "SELL MATERIALS")}</h3>${Object.entries(sellPrices)
+      .filter(([k]) => s.inventory[k] > 0)
+      .map(([k, p]) => row(k, p, `<button class="button secondary" data-action="trade-sell-${k}-1">${tr("Продать 1", "Sell 1")}</button><button class="button secondary" data-action="trade-sell-${k}-999">${tr("Всё", "All")} · ${p * s.inventory[k]} ◈</button>`))
+      .join("") || `<p class="fine-print">${tr("Нечего продать.", "Nothing to sell.")}</p>`}
+    <h3 class="small-heading">${tr("ПРОДАТЬ СНАРЯЖЕНИЕ", "SELL GEAR")}</h3>${owned
+      .map(([kind, id, it]) => `<div class="shop-row"><span>${icon(kind === "weapon" ? it.icon : kind === "armor" ? "shield" : gearIcon(it.slot))}<b>${label(it.name)}</b><small>${gearSellPrice(kind, id)} ◈</small></span><button class="button secondary" data-action="sellGear-${kind}-${id}" ${kind === "weapon" && s.ownedWeapons.length <= 1 ? "disabled" : ""}>${tr("Продать", "Sell")}</button></div>`)
+      .join("") || `<p class="fine-print">${tr("Всё снаряжение надето.", "All your gear is equipped.")}</p>`}
+    <h3 class="small-heading">${tr("КУПИТЬ", "BUY")}</h3>${Object.entries(buyPrices)
+      .map(([k, p]) => row(k, p, `<button class="button secondary" data-action="trade-buy-${k}-1" ${s.gold < p ? "disabled" : ""}>${tr("Купить", "Buy")}</button>`))
+      .join("")}`,
+  );
+}
 function interact(o) {
   const s = game.save;
+  if (o.type === "door") {
+    if (game.enterHouse(o.house)) toast(label(interiorDefs[o.house].name));
+    return;
+  }
+  if (o.type === "houseExit") {
+    game.leaveHouse();
+    return;
+  }
+  if (o.type === "stash") {
+    const found = game.openStash(o);
+    toast(
+      !found
+        ? tr("Сундук пуст.", "The chest is empty.")
+        : o.rich
+          ? tr("Старый сундук: золото, 2 эссенции и снаряжение! Загляните в рюкзак.", "Old chest: gold, 2 essences and gear! Check your backpack.")
+          : tr("Сундук: 25 монет, материалы и зелье.", "Chest: 25 coins, materials and a potion."),
+    );
+    return;
+  }
+  if (o.id?.startsWith("keeper-")) {
+    showKeeper(o);
+    return;
+  }
   if (o.type === "trainer") {
     if (o.style !== s.characterClass) {
       toast(
@@ -1145,38 +1606,43 @@ function interact(o) {
     return;
   }
   if (o.type === "rune") {
+    const st = storyOf(s);
     if (s.flags[o.id]) {
+      toast(tr("Обелиск горит. Долина помнит, каким светом вы его зажгли.", "The obelisk burns. The valley remembers what light you lit it with."));
+      return;
+    }
+    if (st.wave?.anchor === o.id) {
+      toast(tr("Скверна ещё жива — добейте врагов вокруг обелиска!", "The blight still lives — finish the foes around the obelisk!"));
+      return;
+    }
+    const scene = o.id === "forestRune" && s.quest === 1 ? "forest" : o.id === "mountainRune" && s.quest === 3 ? "ivva" : null;
+    if (scene) playScene(scene);
+    else toast(tr("Обелиск молчит. Знак на ладони ещё не откликается — следуйте журналу.", "The obelisk is silent. The Mark doesn't answer yet — follow your journal."));
+    return;
+  }
+  if (o.type === "altar") {
+    if (s.quest === 9 && !s.flags.eclipseAwake) {
+      playScene("nerei");
+      return;
+    }
+    if (s.quest === 9 && s.flags.eclipseAwake) {
       toast(
         tr(
-          "Обелиск уже светится. Долина помнит вашу помощь.",
-          "The obelisk already glows. The valley remembers your help.",
+          "Нерей рядом. Ищите светлые круги, когда он гасит свет!",
+          "Nerei is near. Seek the circles of light when he swallows it!",
         ),
       );
       return;
     }
-    if (canActivate(s, o.id)) {
-      s.flags[o.id] = true;
-      s.quest = o.id === "forestRune" ? 2 : 4;
-      game.addXp(45);
-      game.persist();
-      game.audio.effect("level");
-      updateHUD();
+    if (s.quest === 8) {
       toast(
         tr(
-          "Обелиск пробудился! Задание обновлено.",
-          "The obelisk has awakened! Quest updated.",
+          `Сердце треснуло. Нужны осколки затмения: ${shardCount(s)}/3.`,
+          `The Heart is cracked. You need the eclipse shards: ${shardCount(s)}/3.`,
         ),
       );
-    } else
-      toast(
-        tr(
-          "Сначала выполните задания обелиска в журнале.",
-          "Complete the obelisk tasks in your journal first.",
-        ),
-      );
-    return;
-  }
-  if (o.type === "altar") {
+      return;
+    }
     if (s.flags.bossDefeated) {
       toast(
         tr(
@@ -1204,11 +1670,7 @@ function interact(o) {
       );
       return;
     }
-    openModal(
-      tr("Древний хранитель", "Ancient guardian"),
-      `<p class="modal-intro">${tr("Кристаллы отзываются на свет обелисков. Когда вы коснётесь Сердца долины, хранитель пробудится. Приготовьте зелья и следите за кругом его атаки.", "The crystals respond to the obelisks’ light. Touch the Heart of the valley to awaken the guardian. Prepare your potions and watch for its attack circle.")}</p>${btn(tr("Пробудить хранителя", "Awaken the guardian"), "awaken", "primary", "crystal")}`,
-      "dialog",
-    );
+    playScene("guardian");
     return;
   }
   if (o.id === "sign") {
@@ -1221,78 +1683,102 @@ function interact(o) {
     return;
   }
   if (o.id === "elder") {
-    if (s.quest === 0)
+    const scene = { 0: "prologue", 2: "oliver2", 6: "seals", 10: "epilogue" }[s.quest];
+    if (scene) {
+      playScene(scene);
+      return;
+    }
+    if (s.quest === 7 && allSeals(s))
       dialog(
         o,
         tr(
-          "Здравствуй, путник. Когда-то два обелиска хранили покой нашей долины. Теперь их свет угас. Начни с Шепчущего леса: помоги с пятью слизнями, найди три лунные травы и коснись обелиска.",
-          "Welcome, traveler. Two obelisks once kept our valley at peace. Their light has faded. Begin in the Whispering Woods: defeat five slimes, find three moonleaves and touch the obelisk.",
+          "Четыре печати… Я молился, чтобы этот день не наступил. Печати не просто держали владык — они были замками на темнице Нерея Бессветного, первого хранителя долины, который захотел погасить солнце. Прошлой ночью Сердце долины треснуло. Из трещины вышли три вестника, и каждый унёс осколок затмения: в Мёртвый лес, на Туманные болота и в Белую тундру. Пока осколки у них, разлом открыт наполовину — и тень растёт. Отними осколки, и мы закроем это навсегда.",
+          "Four seals… I prayed this day would never come. The seals did not just hold the lords — they were locks on the prison of Nerei the Lightless, the valley’s first guardian, who wished to put out the sun. Last night the Heart of the valley cracked. Three heralds stepped out, each carrying an eclipse shard: to Deadwood, the Misty Marshes and the White Tundra. While they hold the shards the rift stays half open — and the shadow grows. Take the shards and we will end this for good.",
         ),
         btn(
-          tr("Я помогу долине", "I will help the valley"),
-          "acceptMain",
+          tr("Я найду вестников · 300 монет", "I will find the heralds · 300 coins"),
+          "actThree",
           "primary",
           "flag",
         ),
       );
-    else if (s.quest === 2)
+    else if (s.quest === 8 || s.quest === 9)
       dialog(
         o,
-        tr(
-          "Лес снова дышит свободно! Вот награда за твою помощь. Теперь отправляйся к Серебряным вершинам: победи трёх големов, собери три кристалла и зажги второй обелиск. Рин в Высоком Ключе расскажет о руинах.",
-          "The woods can breathe again! Here is your reward. Now travel to the Silver Peaks: defeat three golems, gather three crystals and light the second obelisk. Rin in Highspring will tell you about the ruins.",
-        ),
-        btn(
-          tr("Получить 80 монет и 70 XP", "Claim 80 coins and 70 XP"),
-          "forestReward",
-          "primary",
-          "coin",
-        ),
-      );
-    else if (s.quest === 6)
-      dialog(
-        o,
-        tr(
-          "Ты вернул свет Эльдерии. Мы будем рассказывать твою историю у костра. Прими наш дар — он поможет тебе открыть все оставшиеся тайны долины.",
-          "You restored Elderia’s light. We will tell your story by the fire. Accept our gift — it will help you uncover the valley’s remaining secrets.",
-        ),
-        btn(
-          tr("Завершить историю · 200 монет", "Finish the story · 200 coins"),
-          "finalReward",
-          "primary",
-          "crystal",
-        ),
+        s.quest === 8
+          ? tr(
+              `Вестники прячутся в дальних землях: Мёртвый лес, Туманные болота, Белая тундра. Осколков у тебя: ${shardCount(s)} из 3. Тени боятся света — оружие света ранит их сильнее, а сами они умеют появляться за спиной. Не стой на месте.`,
+              `The heralds hide in the farlands: Deadwood, the Misty Marshes, the White Tundra. You hold ${shardCount(s)} of 3 shards. Shadows fear light — they also slip behind your back. Keep moving.`,
+            )
+          : tr(
+              "Осколки у тебя. Иди к Сердцу долины и вложи их в разлом. Когда Нерей погасит свет, ищи золотые круги — только в них затмение не тронет тебя.",
+              "You hold the shards. Go to the Heart of the valley and set them in the rift. When Nerei swallows the light, seek the golden circles — only there will the eclipse spare you.",
+            ),
+        btn(tr("Продолжить", "Continue"), "close", "primary", "arrow"),
       );
     else
       dialog(
         o,
-        s.quest === 7
+        s.quest === 11 && s.flags.reconciled
+          ? tr(
+              "Иногда по ночам над руинами видят две фигуры у костра — в латах и в короне из тени. Они больше не спорят. Спасибо тебе, хранитель.",
+              "Some nights two figures are seen by a fire above the ruins — one in armour, one crowned in shadow. They argue no more. Thank you, guardian.",
+            )
+          : s.quest === 11 && s.flags.duskPower
+          ? tr(
+              "…Ты выбрал силу. Я не осуждаю — Ардан тоже сомневался. Но знай: если серое пламя когда-нибудь возьмёт верх, долине снова понадобится хранитель.",
+              "…You chose power. I don't judge — Ardan doubted too. But know this: if the grey flame ever wins, the valley will need a guardian again.",
+            )
+          : s.quest === 11
+          ? tr(
+              "Хранитель рассвета! Дети уже играют в тебя у колодца. Долина спокойна, но сундуки дальних земель и испытания глубин всё ещё ждут смелых.",
+              "Keeper of Dawn! The children already play at being you by the well. The valley is calm, but the farland chests and the depth challenges still await the brave.",
+            )
+          : s.quest === 7
           ? tr(
               "Наша долина всегда будет твоим домом. Загляни к Мире и Браму, если ещё не помог им. В глубинах ждут четыре владыки, а по миру разбросаны сорок тайников.",
               "Our valley will always be your home. Visit Mira and Bram if they still need help. Four dungeon lords await below, and forty hidden chests are scattered across the world.",
             )
+          : s.quest === 1
+          ? tr(
+              "Лесной обелиск — к северу, в Шепчущем лесу. Коснись его — и Знак покажет, что делать.",
+              "The forest obelisk lies north in the Whispering Woods. Touch it and the Mark will show you what to do.",
+            )
+          : s.quest === 3
+          ? tr(
+              "Лея всё ещё у Пепельных. Горный обелиск — над Высоким Ключом. Торопись.",
+              "Lea is still with the Ashen. The mountain obelisk stands above Highspring. Hurry.",
+            )
           : tr(
-              "Следуй подсказкам в журнале. Лесной обелиск стоит на севере леса, а горный — на высокой площадке. У костра всегда можно бесплатно восстановить силы.",
-              "Follow your journal’s guidance. The forest obelisk is north of the woods, and the mountain obelisk stands on a high plateau. You can always recover for free at a campfire.",
+              "Следуй журналу. У костра всегда можно бесплатно восстановить силы.",
+              "Follow your journal. You can always recover for free at a campfire.",
             ),
         btn(tr("Продолжить", "Continue"), "close", "primary", "arrow"),
       );
     return;
   }
   if (o.id === "scout") {
-    if (s.quest === 4)
+    const rin = storyOf(s).fate.rin;
+    if (s.quest === 4) {
+      playScene("rin");
+      return;
+    }
+    if (rin === "enemy" || rin === "broken")
+      dialog(
+        o,
+        rin === "enemy"
+          ? tr("Дом Рина пуст. На столе пепел и записка: «Ты выбрал знание. Я выбрал месть. Встретимся у Сердца».", "Rin's house is empty. On the table — ash and a note: “You chose knowledge. I choose revenge. We'll meet at the Heart.”")
+          : tr("Дом Рина пуст. Соседи говорят, он ушёл за горы в ту же ночь и не оглянулся.", "Rin's house is empty. The neighbours say he left over the mountains that same night without looking back."),
+        btn(tr("Уйти", "Leave"), "close", "primary", "arrow"),
+      );
+    else if (s.quest >= 8 && s.quest <= 10)
       dialog(
         o,
         tr(
-          "Свет вершин вернулся! С двумя обелисками можно разбудить Сердце долины. Иди на юго-восток, к древним руинам. Хранитель силён, но медлителен: красный круг предупредит об ударе.",
-          "The peaks shine again! With both obelisks lit, you can awaken the Heart of the valley. Head southeast to the old ruins. The guardian is strong but slow: a red circle will warn you of its strike.",
+          "Я видел тени у перевала — они двигаются быстрее волков и появляются за спиной. Не стой на месте и держи рывок наготове. Оружие света из Сердца долины, говорят, режет их как бумагу.",
+          "I saw shadows by the pass — faster than wolves, and they appear behind your back. Keep moving and save your dodge. They say weapons of light from the Heart cut them like paper.",
         ),
-        btn(
-          tr("Получить 90 монет и 80 XP", "Claim 90 coins and 80 XP"),
-          "mountainReward",
-          "primary",
-          "coin",
-        ),
+        btn(tr("Спасибо, Рин", "Thanks, Rin"), "close", "primary", "arrow"),
       );
     else
       dialog(
@@ -1321,40 +1807,101 @@ function showHerbalist(o = landmarks.find((x) => x.id === "herbalist")) {
       : `<div class="shop-quest"><p>${tr(`Лунная трава: ${s.inventory.herb}/6. Награда: 3 зелья и 50 монет.`, `Moonleaf: ${s.inventory.herb}/6. Reward: 3 potions and 50 coins.`)}</p>${btn(tr("Передать травы", "Give herbs"), "herbReward", "secondary", "leaf")}</div>`;
   dialog(
     o,
-    tr(
-      "Хорошее зелье начинается с хорошей травы. Берегите себя в дороге! Вы также можете варить зелья прямо в рюкзаке.",
-      "A good potion starts with a good herb. Stay safe on your travels! You can also brew potions in your backpack.",
-    ),
+    storyOf(s).fate.lea === "dead"
+      ? tr("…Лея покупала у меня ромашку каждую весну. Бери, что нужно, и уходи.", "…Lea bought chamomile from me every spring. Take what you need and go.")
+      : storyOf(s).fate.ivva === "redeemed"
+        ? tr("Ивва приходила за травами — для больных. Не думала, что скажу это, но спасибо, что дал ей шанс.", "Ivva came for herbs — for the sick. I never thought I'd say it, but thank you for giving her a chance.")
+        : storyOf(s).knows.villageKnows
+          ? tr("Теперь я варю зелья с молитвой: кто знает, что проснётся под нами завтра. Береги себя.", "Now I brew with a prayer: who knows what wakes beneath us tomorrow. Take care.")
+          : tr(
+              "Хорошее зелье начинается с хорошей травы. Берегите себя в дороге! Вы также можете варить зелья прямо в рюкзаке.",
+              "A good potion starts with a good herb. Stay safe on your travels! You can also brew potions in your backpack.",
+            ),
     btn(tr("До встречи", "See you soon"), "close", "secondary"),
     `${quest}<div class="shop-row"><span>${icon("potion")}${tr("Зелье здоровья · +65 HP", "Health potion · +65 HP")}</span>${btn("20 ◈", "buyPotion", "secondary", "coin")}</div><div class="shop-row"><span>${icon("spark")}${tr("Зелье энергии · +60 MP", "Energy potion · +60 MP")}</span>${btn("25 ◈", "buyMana", "secondary", "coin")}</div>`,
   );
 }
-function showSmith(o = landmarks.find((x) => x.id === "smith")) {
+// Vendor screen: tabs, a compact list with quick actions and a detail panel.
+let vendorTab = "weapon",
+  vendorSel = null;
+const rarityName = (r) =>
+  ({ mythic: tr("МИФИЧЕСКОЕ", "MYTHIC"), legendary: tr("ЛЕГЕНДАРНОЕ", "LEGENDARY"), epic: tr("ЭПИЧЕСКОЕ", "EPIC"), rare: tr("РЕДКОЕ", "RARE") })[r] || tr("ОБЫЧНОЕ", "COMMON");
+function vendorEntries(tab) {
   const s = game.save;
+  if (tab === "weapon")
+    return classWeapons(s.characterClass)
+      .filter(([, w]) => !w.source)
+      .map(([id, w]) => ({ kind: "weapon", id, item: w, icon: w.icon, rarity: w.rarity || "common", owned: s.ownedWeapons.includes(id), equipped: s.equippedWeapon === id }));
+  if (tab === "armor")
+    return Object.entries(armors)
+      .filter(([id, a]) => id !== "none" && !a.source)
+      .map(([id, a]) => ({ kind: "armor", id, item: a, icon: "shield", rarity: a.rarity || ((a.level || 1) >= 12 ? "legendary" : (a.level || 1) >= 7 ? "epic" : (a.level || 1) >= 4 ? "rare" : "common"), owned: s.ownedArmors.includes(id), equipped: s.equippedArmor === id }));
+  return Object.entries(wearables)
+    .filter(([, a]) => !a.source && (!a.class || a.class === s.characterClass))
+    .map(([id, a]) => ({ kind: "wear", id, item: a, icon: gearIcon(a.slot), rarity: a.level >= 10 ? "epic" : a.level >= 5 ? "rare" : "common", owned: s.ownedWearables.includes(id), equipped: s.equippedWearables[a.slot] === id }));
+}
+function quickAction(e) {
+  const s = game.save,
+    level = e.item.level || 1,
+    price = e.item.price || (e.kind === "weapon" && !e.item.recipe ? 45 : 0),
+    prefix = { weapon: ["equip-", "buyWeapon-", "weaponCraft-"], armor: ["armorEquip-", "armorBuy-", "armorCraft-"], wear: ["wearEquip-", "wearBuy-", "wearCraft-"] }[e.kind];
+  if (e.equipped) return `<span class="vendor-state">${icon("check")}${tr("Надето", "Worn")}</span>`;
+  if (e.owned) return `<button class="button secondary" data-action="${prefix[0] + e.id}" ${s.level < level ? "disabled" : ""}>${tr("Надеть", "Equip")}</button>`;
+  if (price) return `<button class="button secondary" data-action="${prefix[1] + e.id}" ${s.level < level || s.gold < price ? "disabled" : ""}>${icon("coin")}${price}</button>`;
+  if (e.item.requires && missingRequirements(s, e.item).length) return `<span class="vendor-state">${icon("lock")}${tr("Нужны победы", "Needs victories")}</span>`;
+  if (e.item.recipe) return `<button class="button secondary" data-action="${prefix[2] + e.id}" ${s.level < level || !canPayMaterials(s, e.item.recipe) ? "disabled" : ""}>${tr("Создать", "Craft")}</button>`;
+  return "";
+}
+function vendorDetail(e) {
+  if (!e) return `<div class="gear-card vendor-detail"><div class="gear-title"><div><h3>${tr("Выберите товар", "Choose an item")}</h3><small>${tr("СЛЕВА", "FROM THE LIST")}</small></div></div><p>${tr("Здесь появятся характеристики и сравнение с надетым.", "Stats and a comparison with your gear appear here.")}</p><div class="gear-stats"></div></div>`;
+  const s = game.save,
+    it = e.item;
+  let stats = "";
+  if (e.kind === "weapon") {
+    const st = deriveStats({ ...s, equippedWeapon: e.id }, classes[s.characterClass]);
+    stats = `${st.damage} ${tr("урона", "damage")} · ${it.cooldown.toFixed(2)} ${tr("с", "s")} · ${Math.round(it.range / TILE)} ${tr("клеток", "tiles")}${it.element ? ` · ${label(elementNames[it.element])}` : ""} · ${tr("крит", "crit")} ${Math.round(critChance(s, it) * 100)}%${it.lifesteal ? ` · ${tr("вампиризм", "life steal")} ${Math.round(it.lifesteal * 100)}%` : ""}`;
+  } else stats = `+${it.defense} ${tr("защиты", "defense")} · +${it.hp} HP${it.mana ? ` · +${it.mana} MP` : ""}${it.speed ? ` · ${it.speed > 0 ? "+" : ""}${it.speed} ${tr("скорости", "speed")}` : ""}${it.crit ? ` · +${Math.round(it.crit * 100)}% ${tr("крит", "crit")}` : ""}`;
+  return `<article class="gear-card vendor-detail ${e.equipped ? "equipped" : ""}"><div class="gear-title">${icon(e.icon)}<div><h3 class="rarity-${e.rarity}">${label(it.name)}</h3><small>${tr("УРОВЕНЬ", "LEVEL")} ${it.level || 1} · ${rarityName(e.rarity)}</small></div></div><p>${label(it.desc || ["", ""]) || ""}</p><div class="gear-stats">${stats}</div>${e.equipped ? "" : gearComparison({ weapon: "w", armor: "a", wear: "g" }[e.kind], e.id)}${e.equipped ? `<span class="equipped-label">${icon("check")}${tr("Надето", "Equipped")}</span>` : purchaseActions(e.id, it, e.kind)}</article>`;
+}
+function showSmith(o = landmarks.find((x) => x.id === "smith")) {
+  const s = game.save,
+    tabs = [
+      ["weapon", tr("Оружие", "Weapons"), "sword"],
+      ["armor", tr("Броня", "Armor"), "shield"],
+      ["wear", tr("Одежда", "Clothing"), "helmet"],
+    ],
+    entries = vendorEntries(vendorTab),
+    chosen = entries.find((e) => e.id === vendorSel) || entries.find((e) => e.equipped) || entries[0];
   const quest = s.flags.smithQuestDone
-    ? `<div class="shop-note">${icon("check")}${tr("Работа для кузнеца · завершено", "A smith’s work · completed")}</div>`
+    ? ""
     : !s.flags.smithQuest
-      ? `<div class="shop-quest"><p>${tr("Нужны 4 куска железной руды с горных троп. Принесёшь — бесплатно улучшу оружие.", "I need 4 pieces of iron ore from the mountain trails. Bring them and I will upgrade your weapon for free.")}</p>${btn(tr("Взять задание", "Accept quest"), "acceptSmith", "secondary", "flag")}</div>`
-      : `<div class="shop-quest"><p>${tr(`Железная руда: ${s.inventory.ore}/4. Награда: +1 к оружию.`, `Iron ore: ${s.inventory.ore}/4. Reward: +1 weapon upgrade.`)}</p>${btn(tr("Передать руду", "Give ore"), "smithReward", "secondary", "crystal")}</div>`;
-  dialog(
-    o,
-    tr(
-      "Броню покупают, создают из материалов или находят у боссов. Усиление оружия и брони требует монет, руды, а позднее — эссенций.",
-      "Buy armor, craft it from materials or claim it from bosses. Upgrades require coins and ore, with essences needed for higher ranks.",
-    ),
-    btn(tr("До встречи", "See you soon"), "close", "secondary"),
-    `${quest}<h3 class="small-heading">${tr("ОРУЖИЕ В ПРОДАЖЕ", "WEAPONS FOR SALE")}</h3>${weaponCards("shop")}<h3 class="small-heading">${tr("БРОНЯ · ПОКУПКА И КРАФТ", "ARMOR · BUY & CRAFT")}</h3>${armorCards("shop")}${wearableCards("shop")}<h3 class="small-heading">${tr("УСИЛЕНИЕ СНАРЯЖЕНИЯ", "EQUIPMENT UPGRADES")}</h3>${[
-      "weapon",
-      "armor",
-    ]
-      .map((kind) => {
-        const rank = s[kind + "Level"],
-          cost = kind === "weapon" ? weaponUpgradeCost(s) : armorUpgradeCost(s),
-          required = 2 + rank * 2;
-        return `<div class="shop-row"><span>${icon(kind === "weapon" ? "sword" : "shield")}<b>${tr(kind === "weapon" ? "Оружие" : "Броня", kind === "weapon" ? "Weapon" : "Armor")} +${rank}${rank < 6 ? " → +" + (rank + 1) : " · MAX"}</b><small>${tr("Нужен уровень", "Requires level")} ${required} · ${cost.gold} ◈ · ${materialText({ ore: cost.ore, essence: cost.essence })}${kind === "weapon" ? " · +3 " + tr("урона", "damage") : " · +2 " + tr("защиты", "defense")}</small></span><button class="button secondary" data-action="${kind === "weapon" ? "upgradeWeapon" : "upgradeArmor"}" ${rank >= 6 || s.level < required || (kind === "armor" && s.equippedArmor === "none") ? "disabled" : ""}>${tr("Усилить", "Upgrade")}</button></div>`;
-      })
-      .join("")}`,
+      ? `<div class="vendor-quest"><span>${icon("flag")}${tr("Нужны 4 куска руды. Принесёшь — бесплатно улучшу оружие.", "I need 4 iron ore. Bring them and I'll upgrade your weapon for free.")}</span>${btn(tr("Взять задание", "Accept quest"), "acceptSmith", "secondary")}</div>`
+      : `<div class="vendor-quest"><span>${icon("flag")}${tr(`Руда: ${s.inventory.ore}/4 · награда: +1 к оружию`, `Ore: ${s.inventory.ore}/4 · reward: +1 weapon`)}</span>${btn(tr("Передать руду", "Give ore"), "smithReward", "secondary")}</div>`;
+  const upgrades = ["weapon", "armor"]
+    .map((kind) => {
+      const rank = s[kind + "Level"],
+        cost = kind === "weapon" ? weaponUpgradeCost(s) : armorUpgradeCost(s),
+        required = 2 + rank * 2;
+      return `<div class="vendor-upgrade">${icon(kind === "weapon" ? "sword" : "shield")}<span><b>${tr(kind === "weapon" ? "Оружие" : "Броня", kind === "weapon" ? "Weapon" : "Armor")} +${rank}${rank < 6 ? " → +" + (rank + 1) : " · MAX"}</b><small>${tr("ур.", "lvl")} ${required} · ${cost.gold} ◈ · ${materialText({ ore: cost.ore, essence: cost.essence })}</small></span><button class="button secondary" data-action="${kind === "weapon" ? "upgradeWeapon" : "upgradeArmor"}" ${rank >= 6 || s.level < required || s.gold < cost.gold || (kind === "armor" && s.equippedArmor === "none") ? "disabled" : ""}>${tr("Усилить", "Upgrade")}</button></div>`;
+    })
+    .join("");
+  openModal(
+    label(o.name),
+    `<div class="vendor-head"><canvas id="vendor-face" width="64" height="64"></canvas><p>${tr("Выбирай, путник. Броня и клинки ждут того, кто их заслужит.", "Take your pick, traveler. Armor and blades await whoever earns them.")}</p><div class="inventory-gold">${icon("coin")}${s.gold}</div></div>${quest}
+    <div class="vendor-tabs">${tabs.map(([id, name, ic]) => `<button class="recipe-chip ${vendorTab === id ? "active" : ""}" data-action="vendorTab-${id}">${icon(ic)}${name}</button>`).join("")}</div>
+    <div class="vendor-layout"><div class="vendor-list">${entries
+      .map(
+        (e) =>
+          `<div class="vendor-row ${chosen?.id === e.id ? "selected" : ""} ${s.level < (e.item.level || 1) ? "locked" : ""}" data-action="vendorSel-${e.id}" role="button" tabindex="0">${icon(e.icon)}<span><b class="rarity-${e.rarity}">${label(e.item.name)}</b><small>${tr("ур.", "lvl")} ${e.item.level || 1}${e.owned ? " · " + tr("есть", "owned") : ""}</small></span>${quickAction(e)}</div>`,
+      )
+      .join("")}</div>${vendorDetail(chosen)}</div>
+    <div class="vendor-upgrades">${upgrades}</div>`,
+    "vendor",
+    tr("КУЗНИЦА", "FORGE"),
   );
+  const face = document.querySelector("#vendor-face").getContext("2d");
+  face.imageSmoothingEnabled = false;
+  drawHero(face, 32, 60, o.style || "smith", { scale: 1.5 });
 }
 function materialText(recipe = {}) {
   return Object.entries(recipe)
@@ -1372,7 +1919,7 @@ function armorCards(mode = "inventory") {
       const owned = s.ownedArmors.includes(id),
         equipped = s.equippedArmor === id,
         locked = s.level < (a.level || 1);
-      return `<article class="gear-card ${equipped ? "equipped" : ""}"><div class="gear-title">${icon("shield")}<div><h3>${label(a.name)}</h3><small>${a.source ? tr("ТРОФЕЙ БОССА", "BOSS LOOT") : tr("СНАРЯЖЕНИЕ", "EQUIPMENT")} · ${tr("Уровень", "Level")} ${a.level || 1}</small></div></div><p>${label(a.desc)}</p><div class="gear-stats">${a.defense} ${tr("защиты", "defense")} · +${a.hp} HP${a.mana ? ` · +${a.mana} MP` : ""}</div>${equipped ? `<span class="equipped-label">${icon("check")}${tr("Надето", "Equipped")}</span>` : purchaseActions(id,a,'armor')}</article>`;
+      return `<article class="gear-card ${equipped ? "equipped" : ""}"><div class="gear-title">${icon("shield")}<div><h3>${label(a.name)}</h3><small>${a.source ? tr("ТРОФЕЙ БОССА", "BOSS LOOT") : tr("СНАРЯЖЕНИЕ", "EQUIPMENT")} · ${tr("Уровень", "Level")} ${a.level || 1}</small></div></div><p>${label(a.desc)}</p><div class="gear-stats">${a.defense} ${tr("защиты", "defense")} · +${a.hp} HP${a.mana ? ` · +${a.mana} MP` : ""}${a.speed ? ` · ${a.speed > 0 ? "+" : ""}${a.speed} ${tr("скорости", "speed")}` : ""}</div>${equipped || locked ? "" : gearComparison("a", id)}${equipped ? `<span class="equipped-label">${icon("check")}${tr("Надето", "Equipped")}</span>` : purchaseActions(id,a,'armor')}</article>`;
     })
     .join("")}</div>`;
 }
@@ -1405,7 +1952,12 @@ function showDungeon(id) {
     canEnter = dungeonAccess(s, id);
   openModal(
     label(d.name),
-    `<div class="dungeon-intro" style="--dungeon-color:${d.color}">${icon("crystal")}<span>${tr("ПОДЗЕМЕЛЬЕ", "DUNGEON")} · ${tr("УРОВЕНЬ", "LEVEL")} ${d.level} · ${d.floors} ${tr("ЭТАЖА", "FLOORS")}</span><h3>${label(bossNames[d.boss])}</h3><p>${label(d.desc)}</p></div><div class="dungeon-loot"><b>${tr("ГАРАНТИРОВАННЫЕ ТРОФЕИ", "GUARANTEED SPOILS")}</b><span>${icon(weapons[d.loot[s.characterClass]].icon)}${label(weapons[d.loot[s.characterClass]].name)}</span><span>${icon("shield")}${label(armors[d.armor].name)}</span><span>${icon("crystal")}${tr("Эссенции для редкого крафта", "Essences for rare crafting")}</span></div><p class="fine-print">${tr("В зале босса выход запечатывается. Зелья имеют перезарядку 8 секунд. После поражения вы вернётесь к костру. Собранное снаряжение сохранится; зачистку придётся начать снова. Неподобранные трофеи перемещаются к входу.", "The boss arena seals its exit. Potions have an 8-second cooldown. Defeat returns you to a campfire. Collected equipment is kept, but the run starts over. Unclaimed spoils move to the entrance.")}</p>${s.dungeonClears[id] ? `<p class="tier-warning">${tr(`Испытание ${Math.min(6, s.dungeonClears[id]) + 1}: враги усилены. Повторные трофеи превращаются в эссенции.`, `Challenge ${Math.min(6, s.dungeonClears[id]) + 1}: stronger enemies. Duplicate gear grants essences.`)}</p>` : ""}<div class="dialog-actions"><button class="button primary" data-action="dungeonEnter-${id}" ${canEnter ? "" : "disabled"}>${tr("Спуститься", "Enter dungeon")}</button>${btn(tr("Подготовиться", "Prepare"), "close", "secondary")}</div>${!canEnter ? `<p class="recipe-text">${tr(`Нужен уровень ${d.level}${id === "citadel" ? " и три печати других подземелий" : ""}.`, `Requires level ${d.level}${id === "citadel" ? " and the other three dungeon seals" : ""}.`)}</p>` : ""}`,
+    `<div class="dungeon-intro" style="--dungeon-color:${d.color}">${icon("crystal")}<span>${tr("ПОДЗЕМЕЛЬЕ", "DUNGEON")} · ${tr("УРОВЕНЬ", "LEVEL")} ${d.level} · ${d.floors} ${tr("ЭТАЖА", "FLOORS")}</span><h3>${label(bossNames[d.boss])}</h3><p>${label(d.desc)}</p></div><div class="dungeon-loot"><b>${tr("ГАРАНТИРОВАННЫЕ ТРОФЕИ", "GUARANTEED SPOILS")}</b><span>${icon(weapons[d.loot[s.characterClass]].icon)}${label(weapons[d.loot[s.characterClass]].name)}</span><span>${icon("shield")}${label(armors[d.armor].name)}</span><span>${icon("crystal")}${tr("Эссенции для редкого крафта", "Essences for rare crafting")}</span></div><p class="fine-print">${tr("В зале босса выход запечатывается. Зелья имеют перезарядку 8 секунд. После поражения вы вернётесь к костру. Собранное снаряжение сохранится; зачистку придётся начать снова. Неподобранные трофеи перемещаются к входу.", "The boss arena seals its exit. Potions have an 8-second cooldown. Defeat returns you to a campfire. Collected equipment is kept, but the run starts over. Unclaimed spoils move to the entrance.")}</p>${s.dungeonClears[id] ? `<p class="tier-warning">${tr(`Испытание ${Math.min(6, s.dungeonClears[id]) + 1}: враги усилены. Повторные трофеи превращаются в эссенции.`, `Challenge ${Math.min(6, s.dungeonClears[id]) + 1}: stronger enemies. Duplicate gear grants essences.`)}</p>` : ""}<div class="difficulty-list">${difficulties
+      .map((df, i) => {
+        const ok = dungeonAccess(s, id, i);
+        return `<div class="vendor-upgrade">${icon(["sword", "shield", "skull"][i])}<span><b>${label(df.name)} · ${tr("ур.", "lvl")} ${d.level + df.level}+</b><small>${i ? tr(`Враги: здоровье ×${df.hp}, урон ×${df.damage} · трофеи: +${df.loot} предм., эссенции ×${df.essence}`, `Foes: health ×${df.hp}, damage ×${df.damage} · spoils: +${df.loot} items, essence ×${df.essence}`) : tr("Стандартные враги и трофеи", "Standard foes and spoils")}</small></span><button class="button ${i ? "secondary" : "primary"}" data-action="dungeonEnter-${id}${i ? "-" + i : ""}" ${ok ? "" : "disabled"}>${tr("Спуститься", "Enter dungeon")}</button></div>`;
+      })
+      .join("")}</div><div class="dialog-actions">${btn(tr("Подготовиться", "Prepare"), "close", "secondary")}</div>${!canEnter ? `<p class="recipe-text">${tr(`Нужен уровень ${d.level}${id === "citadel" ? " и три печати других подземелий" : ""}.`, `Requires level ${d.level}${id === "citadel" ? " and the other three dungeon seals" : ""}.`)}</p>` : ""}`,
     "dungeon-modal",
   );
 }
@@ -1428,7 +1980,7 @@ function showWeather() {
   const c = game.climate;
   openModal(
     tr("Погода и время", "Weather & time"),
-    `<div class="climate-intro">${icon(c.weather === "snow" ? "snow" : c.weather === "storm" ? "spark" : "sun")}<h3>${label(weatherNames[c.weather])} · ${c.night ? tr("Ночь", "Night") : tr("День", "Day")}</h3><p>${weatherDescription(c)}</p></div><p class="modal-intro">${tr("Ночью враги наносят на 20% больше урона, замечают вас дальше и дают на 15% больше опыта. Лунная трава даёт двойную добычу. У костра можно дождаться утра или ночи. В подземельях погода определяется их окружением.", "At night enemies deal 20% more damage, detect you farther away and grant 15% more experience. Moonleaf harvests double. Wait for morning or night at a campfire. Dungeon conditions depend on their environment.")}</p><p class="fine-print">${tr(`Следующая смена погоды примерно через ${Math.ceil(c.untilChange)} секунд игры.`, `The next weather change is in about ${Math.ceil(c.untilChange)} gameplay seconds.`)}</p>${btn(tr("Понятно", "Got it"), "close", "primary", "check")}`,
+    `<div class="climate-intro">${icon(c.weather === "snow" ? "snow" : c.weather === "storm" ? "spark" : "sun")}<h3>${label(seasonNames[c.season])}, ${tr("день", "day")} ${c.dayInSeason} · ${label(weatherNames[c.weather])} · ${c.night ? tr("Ночь", "Night") : tr("День", "Day")}</h3><p>${weatherDescription(c)}</p><p>${seasonDescription(c)}</p></div><p class="modal-intro">${tr("Ночью враги наносят на 20% больше урона, замечают вас дальше и дают на 15% больше опыта. Лунная трава даёт двойную добычу. У костра можно дождаться утра или ночи. В подземельях погода определяется их окружением.", "At night enemies deal 20% more damage, detect you farther away and grant 15% more experience. Moonleaf harvests double. Wait for morning or night at a campfire. Dungeon conditions depend on their environment.")}</p><p class="fine-print">${tr(`Следующая смена погоды примерно через ${Math.ceil(c.untilChange)} секунд игры.`, `The next weather change is in about ${Math.ceil(c.untilChange)} gameplay seconds.`)}</p>${btn(tr("Понятно", "Got it"), "close", "primary", "check")}`,
     "weather",
   );
 }
@@ -1467,6 +2019,15 @@ function spendGold(amount, fn) {
   return true;
 }
 async function action(name) {
+  if (name.startsWith("sc-")) {
+    runSceneChoice(name);
+    return;
+  }
+  if (name.startsWith("skillSchool-")) {
+    skillSchool = name.slice(12);
+    showSkills();
+    return;
+  }
   if (name === "activities") {
     showActivities();
     return;
@@ -1482,6 +2043,7 @@ async function action(name) {
   }
   if (name.startsWith("assign-")) {
     const [, id, slot] = name.split("-");
+    skillSel = id;
     game.assignAbility(id, Number(slot));
     renderHUD();
     showSkills();
@@ -1495,11 +2057,12 @@ async function action(name) {
     return;
   }
   if (name === "locateMentor") {
-    const o = landmarks.find(o=>o.type === "trainer" && o.class === game.save.characterClass) || landmarks.find(o=>o.id === ({warrior:"bladeMentor",ranger:"rangerMentor",mage:"mageMentor"})[game.save.characterClass]);
+    const o = landmarks.find(o=>o.type === "trainer" && o.class === game.save.characterClass) || landmarks.find(o=>o.id === ({warrior:"bladeMentor",ranger:"rangerMentor",mage:"mageMentor",paladin:"paladinMentor",necromancer:"necroMentor"})[game.save.characterClass]);
     game.waypoint = {x:o.x,y:o.y}; showMap(); return;
   }
   if (name.startsWith("bagFilter-")) { bagFilter=name.slice(10); showInventory(); return; }
   if (name.startsWith("recipesFor-")) {
+    invTab = "craft";
     recipeMaterial=name.slice(11);
     const r=recipes.find(r=>recipeMaterial in r.inputs && !game.craftReason(r.id)) || recipes.find(r=>recipeMaterial in r.inputs);
     action("recipe-"+r.id);
@@ -1552,6 +2115,7 @@ async function action(name) {
   if (name.startsWith("recipe-")) {
     const r = recipes.find((r) => r.id === name.slice(7));
     if (!r) return;
+    invTab = "craft";
     recipeMaterial = null;
     craftDraft = Object.entries(r.inputs).flatMap(([id, n]) =>
       Array(n).fill(id),
@@ -1610,7 +2174,8 @@ async function action(name) {
     return;
   }
   if (name.startsWith("dungeonEnter-")) {
-    if (game.enterDungeon(name.slice(13))) {
+    const [, id, diff = "0"] = name.split("-");
+    if (game.enterDungeon(id, Number(diff))) {
       closeModal();
       renderHUD();
     } else
@@ -1652,6 +2217,8 @@ async function action(name) {
     const craft = name.includes("Craft"),
       kind = name.startsWith("weapon") ? "weapon" : "armor",
       id = name.slice(name.indexOf("-") + 1);
+    vendorTab = kind;
+    vendorSel = id;
     if (game.acquireEquipment(kind, id, craft)) {
       renderHUD();
       showSmith();
@@ -1733,6 +2300,7 @@ async function action(name) {
       selectedClass,
       { ...appearance },
       selectedWeapon,
+      selectedRace,
     );
     platform.save(fresh);
     existingSave = fresh;
@@ -1819,6 +2387,15 @@ async function action(name) {
     drawMap(document.querySelector("#large-map"), true);
     return;
   }
+  if (name === "mapTravel") {
+    const id = mapState.camp;
+    if (id && game.fastTravel(id)) {
+      closeModal();
+      updateHUD();
+      toast(tr("Вы у костра.", "You are at the campfire."));
+    }
+    return;
+  }
   if (name === "mapWalk") {
     if (!game.waypoint) {
       toast(
@@ -1866,7 +2443,82 @@ async function action(name) {
     return;
   }
   if (name.startsWith("learn-")) {
-    if (game.learnSkill(Number(name.slice(6)))) showSkills();
+    skillSel = name.slice(6);
+    if (game.learnSkill(name.slice(6))) {
+      renderHUD();
+      showSkills();
+    }
+    return;
+  }
+  if (name.startsWith("trade-")) {
+    const [, mode, key, n] = name.split("-");
+    if (!game.tradeItem(mode, key, Number(n)))
+      toast(tr("Не хватает монет или товара.", "Not enough coins or goods."));
+    renderHUD();
+    showKeeper();
+    return;
+  }
+  if (name.startsWith("sellGear-")) {
+    const [, kind, id] = name.split("-");
+    if (game.sellGear(kind, id)) renderHUD();
+    showKeeper();
+    return;
+  }
+  if (name === "innRest") {
+    if (game.innRest()) {
+      closeModal();
+      updateHUD();
+      toast(tr("Вы выспались. Утро, силы полностью восстановлены.", "You slept well. It's morning and you're fully rested."));
+    }
+    return;
+  }
+  if (name === "openSmith") {
+    showSmith();
+    return;
+  }
+  if (name.startsWith("invTab-")) {
+    invTab = name.slice(7);
+    showInventory();
+    return;
+  }
+  if (name.startsWith("journalTab-")) {
+    journalTab = name.slice(11);
+    showJournal();
+    return;
+  }
+  if (name.startsWith("skillSel-")) {
+    skillSel = name.slice(9);
+    showSkills();
+    return;
+  }
+  if (name === "learnSel") {
+    if (skillSel && game.learnSkill(skillSel)) {
+      renderHUD();
+      showSkills();
+    }
+    return;
+  }
+  if (name.startsWith("vendorTab-")) {
+    vendorTab = name.slice(10);
+    vendorSel = null;
+    showSmith();
+    return;
+  }
+  if (name.startsWith("vendorSel-")) {
+    vendorSel = name.slice(10);
+    showSmith();
+    return;
+  }
+  if (name === "respec") {
+    if (game.respecSkills()) {
+      renderHUD();
+      showSkills();
+      toast(tr("Умения сброшены, очки возвращены.", "Abilities reset, points returned."));
+    }
+    return;
+  }
+  if (name === "readScroll") {
+    if (game.readManuscript()) showInventory();
     return;
   }
   if (name.startsWith("equip-")) {
@@ -1965,59 +2617,53 @@ async function action(name) {
     );
     return;
   }
-  if (name === "acceptMain" && s.quest === 0) {
-    s.quest = 1;
+  if (name === "epilogueDusk" && s.quest === 10) {
+    s.quest = 11;
+    s.skillPoints += 1;
+    s.flags.duskPower = true;
+    s.flags.dawnHero = false;
+    game.addXp(600);
+    audio.effect("quest");
+    saveAndUpdate();
+    showEnding();
+    return;
+  }
+  if (name === "actThree" && s.quest === 7 && allSeals(s)) {
+    s.quest = 8;
+    s.gold += 300;
+    game.spawnQuestEnemies();
+    audio.effect("quest");
     saveAndUpdate();
     closeModal();
     toast(
       tr(
-        "Новое задание: Шёпот лесного обелиска.",
-        "New quest: Whisper of the forest.",
+        "Новая глава: «Голос за печатями». Вестники отмечены на карте.",
+        "New chapter: “The voice beyond the seals”. Heralds are marked on the map.",
       ),
     );
     return;
   }
-  if (name === "forestReward" && s.quest === 2) {
-    s.gold += 80;
-    game.addXp(70);
-    s.quest = 3;
-    saveAndUpdate();
-    closeModal();
+  if (name === "openRift") {
+    if (game.openRift()) {
+      closeModal();
+      toast(
+        tr(
+          "Разлом открыт. Нерей Бессветный выходит на свет!",
+          "The rift is open. Nerei the Lightless steps into the light!",
+        ),
+      );
+    } else toast(tr("Подойдите ближе к Сердцу долины.", "Move closer to the Heart of the valley."));
     return;
   }
-  if (name === "mountainReward" && s.quest === 4) {
-    s.gold += 90;
-    game.addXp(80);
-    s.quest = 5;
+  if (name === "epilogue" && s.quest === 10) {
+    s.quest = 11;
+    s.gold += 500;
+    s.skillPoints += 2;
+    s.flags.dawnHero = true;
+    game.addXp(600);
+    audio.effect("quest");
     saveAndUpdate();
-    closeModal();
-    return;
-  }
-  if (name === "awaken" && s.quest === 5) {
-    s.flags.bossAwake = true;
-    saveAndUpdate();
-    closeModal();
-    toast(
-      tr(
-        "Хранитель пробудился. Следите за красным кругом!",
-        "The guardian is awake. Watch for the red circle!",
-      ),
-    );
-    return;
-  }
-  if (name === "finalReward" && s.quest === 6) {
-    s.gold += 200;
-    game.addXp(150);
-    s.quest = 7;
-    s.flags.victory = true;
-    saveAndUpdate();
-    closeModal();
-    toast(
-      tr(
-        "Первую историю завершили! В журнале открыта кампания четырёх печатей глубин.",
-        "The first story is complete! Find the four depth seals campaign in your journal.",
-      ),
-    );
+    showEnding();
     return;
   }
   if (name === "acceptHerbs" && !s.flags.herbQuest) {
@@ -2126,6 +2772,13 @@ app.addEventListener("click", (e) => {
     showCreation();
     return;
   }
+  const rc = e.target.closest("[data-race]");
+  if (rc) {
+    selectedRace = rc.dataset.race;
+    appearance.skin = races[selectedRace].skins[0];
+    showCreation();
+    return;
+  }
   const cc = e.target.closest("[data-class]");
   if (cc) {
     selectedClass = cc.dataset.class;
@@ -2207,6 +2860,11 @@ window.addEventListener("keydown", (e) => {
       (e.code === "ShiftRight" && bindings.dodge === "ShiftLeft"
         ? "dodge"
         : null);
+  if (modal && !bindingAwait && /^Digit[1-9]$/.test(e.code) && modalRoot.querySelector(".vn-choices")) {
+    const choice = modalRoot.querySelectorAll(".vn-choices button:not(:disabled)")[Number(e.code.slice(5)) - 1];
+    if (choice) choice.click();
+    return;
+  }
   if (!actionKey && !moves.includes(e.code) && e.code !== "Escape") return;
   e.preventDefault();
   audio.unlock();
@@ -2233,6 +2891,9 @@ window.addEventListener("keydown", (e) => {
   else if (e.code === "Escape") showPause();
 });
 window.addEventListener("keyup", (e) => game.keys.delete(e.code));
+document.addEventListener("mapicons", () => {
+  if (modal === "world-map") drawMap(document.querySelector("#large-map"), true);
+});
 const worldCanvas = document.querySelector("#world");
 function worldPoint(e) {
   const r = worldCanvas.getBoundingClientRect();
@@ -2384,7 +3045,17 @@ function releasePointer(e) {
   if (mapDrag && e.pointerId === mapDrag.id) {
     const canvas = document.querySelector("#large-map");
     if (canvas && !mapDrag.moved && e.type !== "pointercancel") {
-      const p = mapPoint(e, canvas);
+      const p = mapPoint(e, canvas),
+        t = mapTransform(canvas, true),
+        camp = !game.save.activeDungeon && !game.save.interior
+          ? landmarks.find(
+              (o) => o.type === "camp" && Math.hypot((o.x - p.x) * t.sx, (o.y - p.y) * t.sy) < 8,
+            )
+          : null;
+      // A click near a discovered campfire also offers fast travel there.
+      mapState.camp = camp && game.save.visitedCamps.includes(camp.id) ? camp.id : null;
+      if (camp && !mapState.camp)
+        toast(tr("Этот костёр ещё не открыт: подойдите к нему.", "This campfire is undiscovered: walk up to it first."));
       if (canWalk(game.world, p.x, p.y)) {
         game.waypoint = p;
         drawMap(canvas, true);
@@ -2459,6 +3130,7 @@ game.onToast = toast;
 game.onInteract = interact;
 game.onDeath = showDeath;
 game.onVictory = showVictory;
+game.onEclipseVictory = showEclipseVictory;
 platform.init().then((save) => {
   existingSave = save;
   showMenu();
@@ -2480,6 +3152,7 @@ if (import.meta.env.DEV)
     CHEST_COUNT,
     canActivate,
     countGathered,
+    barFor,
   };
 
 let draggedItem = null;

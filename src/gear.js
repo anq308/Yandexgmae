@@ -160,6 +160,53 @@ export const wearables = {
     { class: "mage", mana: 20, color: "#a1d4da" },
   ),
 };
+wearables.holySymbol = g(
+  "offhand",
+  "Святой оберег",
+  "Holy symbol",
+  3,
+  14,
+  140,
+  { ore: 3, crystal: 2 },
+  { class: "paladin", mana: 10, color: "#f0d27a" },
+);
+wearables.boneCharm = g(
+  "offhand",
+  "Костяной амулет",
+  "Bone charm",
+  1,
+  8,
+  140,
+  { leather: 2, crystal: 2 },
+  { class: "necromancer", mana: 22, color: "#d8e8c8" },
+);
+wearables.packHorn = g("offhand", "Рог стаи", "Pack horn", 2, 10, 140, { leather: 3, wood: 2 }, { class: "summoner", mana: 15, color: "#c8a070" });
+wearables.beastTotem = g("offhand", "Тотем зверя", "Beast totem", 3, 12, 140, { wood: 3, leather: 2 }, { class: "shapeshifter", hp: 10, color: "#8ac070" });
+wearables.prayerBeads = g("offhand", "Молитвенные чётки", "Prayer beads", 2, 10, 140, { fiber: 3, crystal: 1 }, { class: "monk", mana: 12, color: "#c89a5a" });
+wearables.toolbelt = g("offhand", "Пояс с инструментами", "Toolbelt", 3, 12, 140, { leather: 3, ore: 2 }, { class: "engineer", hp: 10, color: "#8a6a42" });
+// Unique trophies of the six world bosses.
+for (const [id, slot, ru, en, defense, hp, extra] of [
+  ["rootCrown", "head", "Венец из корней", "Crown of roots", 5, 50, { level: 6, color: "#6fb24e" }],
+  ["wormGreaves", "legs", "Поножи из чешуи червя", "Wormscale greaves", 9, 35, { level: 7, color: "#c89a5a" }],
+  ["hexHood", "head", "Капюшон ведьмы", "Hexweaver hood", 3, 20, { level: 8, mana: 40, color: "#4a2f6a" }],
+  ["fangBoots", "feet", "Сапоги Кривого Клыка", "Crookfang boots", 5, 20, { level: 9, speed: 8, color: "#7a4a2a" }],
+  ["cyclopsEye", "offhand", "Око циклопа", "Cyclops eye", 4, 30, { level: 11, mana: 20, range: 20, color: "#3a6ad0" }],
+  ["wyrmHelm", "head", "Шлем Хладокрыла", "Rimewing helm", 10, 45, { level: 13, color: "#9ee4f6" }],
+])
+  wearables[id] = g(slot, ru, en, defense, hp, 0, null, { ...extra, source: "worldboss" });
+// Some pieces sharpen the eye: critical chance bonuses.
+for (const [id, crit] of [["leatherHood", 0.02], ["quiver", 0.03], ["fangBoots", 0.03], ["cyclopsEye", 0.05], ["hexHood", 0.02]])
+  wearables[id].crit = crit;
+wearables.dawnCirclet = g(
+  "head",
+  "Венец рассвета",
+  "Circlet of Dawn",
+  8,
+  40,
+  0,
+  null,
+  { level: 16, mana: 25, speed: 4, source: "eclipse", color: "#f2d98a" },
+);
 export const emptyWearables = () => ({
   head: null,
   legs: null,
@@ -171,7 +218,7 @@ export const equippedPieces = (s) =>
     .map((id) => wearables[id])
     .filter(Boolean);
 export function wearableStats(s) {
-  const out = { defense: 0, hp: 0, mana: 0, speed: 0, range: 0 };
+  const out = { defense: 0, hp: 0, mana: 0, speed: 0, range: 0, crit: 0 };
   for (const a of equippedPieces(s))
     for (const k of Object.keys(out)) out[k] += a[k] || 0;
   return out;

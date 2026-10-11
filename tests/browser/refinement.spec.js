@@ -1,10 +1,11 @@
 import {test, expect} from '@playwright/test';
 async function begin(page, cls='mage') {
-  await page.goto('/'); await page.locator('[data-action=create]').click();
+  await page.goto('/'); await page.evaluate(() => (window.__ELDERIA__.game.rng = () => 0.99));
+  await page.locator('[data-action=create]').click();
   await page.locator(`[data-class=${cls}]`).click(); await page.locator('[data-action=start]').click();
 }
 test('recipe picker explains missing ingredients, previews without spending, crafts batches and preserves selection', async ({page}) => {
-  await begin(page); await page.keyboard.press('KeyI');
+  await begin(page); await page.keyboard.press('KeyI'); await page.locator('[data-action=invTab-craft]').click();
   await page.locator('#recipe-picker').selectOption('rod');
   await expect(page.locator('[data-action=craftMake-rod-1]')).toBeDisabled();
   await expect(page.locator('.craft-status')).toContainText('Не хватает материалов');
@@ -17,6 +18,7 @@ test('recipe picker explains missing ingredients, previews without spending, cra
   await expect(page.locator('#toast')).toContainText('Создано: Удочка × 2');
   await expect(page.locator('#recipe-picker')).toHaveValue('rod');
   await expect(page.locator('[data-action=craftMake-rod-1]')).toBeDisabled();
+  await page.locator('[data-action=invTab-gear]').click();
   await page.locator('[data-bag-key="i:rod:0"]').click();
   await expect(page.locator('.bag-description')).toContainText('Нужна для рыбалки');
   await page.locator('[data-action=bagFilter-gear]').click();
@@ -35,7 +37,7 @@ test('portable clothing crafts and equips once, duplicate or invalid batches nev
     return {before,invalid,remaining,crafted,duplicate,after,unowned,wood,negative,fraction,head:s.equippedWearables.head};
   });
   expect(r).toEqual({before:12,invalid:false,remaining:12,crafted:true,duplicate:false,after:9,unowned:false,wood:3,negative:false,fraction:false,head:'linenCap'});
-  await page.keyboard.press('KeyI'); await page.locator('#recipe-picker').selectOption('cap');
+  await page.keyboard.press('KeyI'); await page.locator('[data-action=invTab-craft]').click(); await page.locator('#recipe-picker').selectOption('cap');
   await expect(page.locator('.craft-status')).toContainText('уже есть');
   await expect(page.locator('[data-action=craftMake-cap-1]')).toBeDisabled();
   await page.reload();await page.locator('[data-action=continue]').click();
@@ -44,24 +46,25 @@ test('portable clothing crafts and equips once, duplicate or invalid batches nev
 test('camp restriction is visible and batch cooking is atomic; fish can restore mana at full health',async({page})=>{
   await begin(page);
   await page.evaluate(()=>{const g=window.__ELDERIA__.game; g.save.x+=300;g.enemies=[]; Object.assign(g.save.inventory,{rawFish:4,wood:2}); window.__ELDERIA__.action('inventory');});
+  await page.locator('[data-action=invTab-craft]').click();
   await page.locator('#recipe-picker').selectOption('fish');
   await expect(page.locator('.craft-status')).toContainText('безопасный костёр');
   await expect(page.locator('[data-action=craftMake-fish-2]')).toBeDisabled();
   const r=await page.evaluate(()=>{const g=window.__ELDERIA__.game,s=g.save;const blocked=g.craftSmall('fish',2);const before=[s.inventory.rawFish,s.inventory.wood];const c=g.world.objects.find(o=>o.id==='camp1');s.x=c.x;s.y=c.y+15;g.enemies=[];const success=g.craftSmall('fish',2);s.hp=g.stats.maxHp;s.mana=0;const eat=g.eatFood('cookedFish');return {blocked,before,success,eat,fish:s.inventory.cookedFish,raw:s.inventory.rawFish,wood:s.inventory.wood,mana:s.mana};});
   expect(r).toEqual({blocked:false,before:[4,2],success:true,eat:true,fish:3,raw:0,wood:0,mana:15});
 });
-test('skill book separates first learning from upgrades, shows real bonuses and provides mentor marker',async({page})=>{
-  await begin(page); await page.evaluate(()=>{const g=window.__ELDERIA__.game;g.equipWeapon('staff');g.save.level=3;g.save.skillPoints=3;g.save.abilityUses.starwave=0;window.__ELDERIA__.action('skills');});
-  const first=page.locator('.skill-node[data-ability=starwave]');
-  await expect(first).toContainText('Изучено · ранг 1/3');
-  await expect(first).not.toContainText('8 попаданий');
-  await expect(first.locator('.skill-preview')).toContainText('100% → Сила 125%');
-  await page.locator('[data-action=learn-0]').click();
-  await expect(first).toContainText('Изучено · ранг 2/3');
-  await expect(first.locator('.skill-status')).toContainText('Нужен уровень 6');
-  await expect(page.locator('[data-action=learn-0]')).toBeDisabled();
+test('skill book shows ranks, costs and what the next rank adds; upgrades need only level and a point',async({page})=>{
+  await begin(page); await page.evaluate(()=>{const g=window.__ELDERIA__.game;g.equipWeapon('staff');g.save.level=4;g.save.skillPoints=3;window.__ELDERIA__.action('skills');});
+  const first=page.locator('.skill-card[data-ability=starwave]');
+  await expect(first.locator('.rank-perks li.current')).toContainText('Открывает приём');
+  await expect(first.locator('.skill-costs')).toContainText('25');
+  await expect(first.locator('.skill-costs')).toContainText('+15%');
+  await page.locator('[data-action=learn-starwave]').click();
+  await expect(first.locator('.rank-perks li.current')).toContainText('Радиус +12%');
+  await expect(first.locator('.skill-status')).toContainText('Нужен уровень 8');
+  await expect(page.locator('[data-action=learn-starwave]')).toBeDisabled();
   expect(await page.evaluate(()=>window.__ELDERIA__.game.save.skillPoints)).toBe(2);
-  await page.locator('[data-action=locateMentor]').click();
+  await page.evaluate(()=>window.__ELDERIA__.action('locateMentor'));
   expect(await page.evaluate(()=>{const g=window.__ELDERIA__.game,o=g.world.objects.find(o=>o.id==='mageMentor');return g.waypoint.x===o.x&&g.waypoint.y===o.y;})).toBe(true);
 });
 test('shop has readable opaque cards and new weapon purchases respect levels, currency and class schools',async({page})=>{
@@ -78,18 +81,20 @@ test('shop has readable opaque cards and new weapon purchases respect levels, cu
   await page.locator('[data-action=buyWeapon-apprenticeFlame]').click();
   expect(await page.evaluate(()=>{const s=window.__ELDERIA__.game.save;return [s.gold,s.equippedWeapon,s.ownedWeapons.includes('apprenticeFlame')];})).toEqual([0,'apprenticeFlame',true]);
   await page.keyboard.press('Escape'); await page.keyboard.press('KeyK');
-  await expect(page.locator('.skills-intro')).toContainText('Магия огня');
-  await expect(page.locator('.skill-node[data-ability=flamewave]')).toContainText('0/8 попаданий');
+  // The new weapon's school is highlighted and its abilities gain +15%.
+  await expect(page.locator('.school-title', {hasText:'Магия огня'})).toContainText('+15%');
+  await expect(page.locator('.skill-card[data-ability=flamewave] .skill-costs')).toContainText('+15%');
 });
-test('first-learning costs are never charged again, upgraded stealth lasts longer, new weapons apply their attack status',async({page})=>{
+test('learning never charges gold, upgraded stealth lasts longer, new weapons apply their attack status',async({page})=>{
   await begin(page,'ranger');
   const r=await page.evaluate(async()=>{
     const {weapons}=await import('/src/equipment.js'), {newSave}=await import('/src/storage.js');
     const g=window.__ELDERIA__.game,s=g.save;s.level=10;s.skillPoints=10;s.gold=100;
     s.ownedWeapons.push('daggers');g.equipWeapon('daggers');g.enemies=[];
     const mentor=g.world.objects.find(o=>o.id==='rangerMentor');s.x=mentor.x;s.y=mentor.y+15;
-    const first=g.learnSkill(1);const firstGold=s.gold;s.x+=400;const upgrade=g.learnSkill(1);const upgradedGold=s.gold;
-    g.paused=false;s.mana=200;const cast=g.useSkill(1),duration=g.buffs.stealth;
+    s.abilityRanks={};
+    const first=g.learnSkill('vanish');const firstGold=s.gold;s.x+=400;const upgrade=g.learnSkill('vanish');const upgradedGold=s.gold;
+    g.paused=false;s.mana=200;const cast=g.useSkill(window.__ELDERIA__.barFor(s).indexOf('vanish')),duration=g.buffs.stealth;
     const hits=[];
     for(const [id,w] of Object.entries(weapons).filter(([,w])=>w.appearance)) {
       g.load(newSave('Arsenal',w.class,{},id));g.save.level=20;g.equipWeapon(id);g.paused=false;g.attackCooldown=0;
@@ -99,8 +104,8 @@ test('first-learning costs are never charged again, upgraded stealth lasts longe
     }
     g.paused=true;return {first,firstGold,upgrade,upgradedGold,cast,duration,hits};
   });
-  expect({...r,hits:undefined}).toEqual({first:true,firstGold:40,upgrade:true,upgradedGold:40,cast:true,duration:6,hits:undefined});
-  expect(r.hits).toHaveLength(12);for(const h of r.hits) expect(h.hp,h.id).toBeLessThan(3000);
+  expect({...r,hits:undefined}).toEqual({first:true,firstGold:100,upgrade:true,upgradedGold:100,cast:true,duration:6,hits:undefined});
+  expect(r.hits).toHaveLength(99);for(const h of r.hits) expect(h.hp,h.id).toBeLessThan(3000);
   expect(r.hits.find(h=>h.id==='frostDaggers').slow).toBeGreaterThan(0);
   expect(r.hits.find(h=>h.id==='emberSpear').burn).toBeGreaterThan(0);
   expect(r.hits.find(h=>h.id==='assassinDaggers').poison).toBeGreaterThan(0);

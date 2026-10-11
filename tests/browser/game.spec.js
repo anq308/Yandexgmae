@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 
 async function begin(page, cls = "warrior") {
   await page.goto("/");
+  // Crits and random drops are disabled so damage checks stay deterministic.
+  await page.evaluate(() => (window.__ELDERIA__.game.rng = () => 0.99));
   await page.getByRole("button", { name: "Начать путешествие" }).click();
   await page.locator(`[data-class="${cls}"]`).click();
   await page.locator("#hero-name").fill("Тестовый герой");
@@ -30,7 +32,7 @@ test("create all classes, preserve choices, save and resume without losing progr
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await begin(page, "mage");
-  await expect(page.locator("#class-label")).toHaveText("Маг");
+  await expect(page.locator("#class-label")).toHaveText("Человек · Маг");
   await page.keyboard.down("KeyD");
   await page.waitForTimeout(250);
   await page.keyboard.up("KeyD");
@@ -54,72 +56,58 @@ test("create all classes, preserve choices, save and resume without losing progr
   expect(after.cls).toBe("mage");
   expect(errors).toEqual([]);
 });
-test("complete the entire quest chain, claim each reward once and keep victory on reload", async ({
+test("complete the story chain through conversations, claim each reward once and keep progress on reload", async ({
   page,
 }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await begin(page);
+  const choose = (a) => page.locator(`[data-action="${a}"]`).click();
+  const quest = () => page.evaluate(() => window.__ELDERIA__.game.save.quest);
+  const killWave = () =>
+    page.evaluate(() => {
+      const g = window.__ELDERIA__.game;
+      g.setPaused(true);
+      for (const e of g.enemies.filter((e) => e.storyWave)) g.damageEnemy(e, 99999);
+      g.storyTick();
+      g.setPaused(false);
+    });
   await approach(page, "elder");
-  await page.locator('[data-action="acceptMain"]').click();
-  expect(await page.evaluate(() => window.__ELDERIA__.game.save.quest)).toBe(1);
-  await page.evaluate(() => {
-    const g = window.__ELDERIA__.game;
-    g.setPaused(true);
-    g.enemies
-      .filter((e) => e.type === "slime")
-      .slice(0, 5)
-      .forEach((e) => g.damageEnemy(e, 999));
-    g.world.objects
-      .filter((o) => o.type === "herb")
-      .slice(0, 3)
-      .forEach((o) => g.collect(o));
-    g.setPaused(false);
-  });
+  await choose("sc-prologue-start-accept");
+  expect(await quest()).toBe(1);
   await approach(page, "forestRune");
-  expect(await page.evaluate(() => window.__ELDERIA__.game.save.quest)).toBe(2);
+  await choose("sc-forest-start-light");
+  expect(await page.evaluate(() => window.__ELDERIA__.game.enemies.filter((e) => e.storyWave === "forest").length)).toBe(5);
+  await killWave();
+  expect(await quest()).toBe(2);
   await approach(page, "elder");
-  await page.locator('[data-action="forestReward"]').click();
-  expect(await page.evaluate(() => window.__ELDERIA__.game.save.quest)).toBe(3);
-  await page.evaluate(() => {
-    const g = window.__ELDERIA__.game;
-    g.setPaused(true);
-    g.enemies
-      .filter((e) => e.type === "golem")
-      .slice(0, 3)
-      .forEach((e) => g.damageEnemy(e, 999));
-    g.world.objects
-      .filter((o) => o.type === "crystal")
-      .slice(0, 3)
-      .forEach((o) => g.collect(o));
-    g.setPaused(false);
-  });
+  await choose("sc-oliver2-start-next");
+  await choose("sc-oliver2-news-gold");
+  expect(await quest()).toBe(3);
   await approach(page, "mountainRune");
-  expect(await page.evaluate(() => window.__ELDERIA__.game.save.quest)).toBe(4);
+  await choose("sc-ivva-start-fight");
+  await killWave();
+  expect(await quest()).toBe(4);
   await approach(page, "scout");
-  await page.locator('[data-action="mountainReward"]').click();
+  await choose("sc-rin-start-oath");
+  expect(await quest()).toBe(5);
   await approach(page, "altar");
-  await page.locator('[data-action="awaken"]').click();
-  expect(
-    await page.evaluate(() => window.__ELDERIA__.game.save.flags.bossAwake),
-  ).toBe(true);
+  await choose("sc-guardian-start-fight");
+  expect(await page.evaluate(() => window.__ELDERIA__.game.save.flags.bossAwake)).toBe(true);
   await page.evaluate(() => {
     const g = window.__ELDERIA__.game;
-    g.damageEnemy(
-      g.enemies.find((e) => e.type === "guardian"),
-      99999,
-    );
+    g.damageEnemy(g.enemies.find((e) => e.type === "guardian"), 99999);
   });
   await expect(page.getByRole("dialog")).toContainText("Свет вернулся");
   await page.locator('.modal-header [data-action="close"]').click();
   await approach(page, "elder");
-  await page.locator('[data-action="finalReward"]').click();
-  expect(await page.evaluate(() => window.__ELDERIA__.game.save.quest)).toBe(7);
+  await choose("sc-seals-start-finish");
+  expect(await quest()).toBe(7);
   const gold = await page.evaluate(() => window.__ELDERIA__.game.save.gold);
-  await page.evaluate(() => window.__ELDERIA__.action("finalReward"));
-  expect(await page.evaluate(() => window.__ELDERIA__.game.save.gold)).toBe(
-    gold,
-  );
+  await page.evaluate(() => window.__ELDERIA__.action("sc-seals-start-finish"));
+  expect(await page.evaluate(() => window.__ELDERIA__.game.save.gold)).toBe(gold);
+  const fate = await page.evaluate(() => window.__ELDERIA__.game.save.story.fate);
+  expect(fate).toEqual({ lea: "saved", ivva: "fled", rin: "ally", guardian: "slain" });
   await page.reload();
   await page.locator('[data-action="continue"]').click();
   await expect(page.locator("#quest-title")).toHaveText("Четыре печати глубин");
@@ -155,8 +143,9 @@ test("real attacks, cooldowns, potions, campfires and death recovery behave corr
       potions: s.inventory.potion,
     };
   });
-  expect(result.first).toBe(58);
-  expect(result.second).toBe(58);
+  // Slimes have 118 HP after the 1.8 difficulty pass; one sword hit deals 16.
+  expect(result.first).toBe(102);
+  expect(result.second).toBe(102);
   expect(result.mana).toBe(45);
   expect(result.skill).toBe(5);
   expect(result.hp).toBe(result.max);
@@ -188,9 +177,9 @@ test("menus really pause simulation and crafting cannot block the main quest", a
     g.save.inventory.herb = 3;
     g.collected = new Set(["herb0", "herb1", "herb2"]);
     g.save.quest = 1;
-    g.save.kills.slime = 5;
     g.persist();
   });
+  await page.locator('[data-action="invTab-craft"]').click();
   await page.locator('[data-action="recipe-potion"]').click();
   await page.locator('[data-action="craftOutput"]').click();
   expect(
@@ -239,8 +228,8 @@ test("ranger and mage projectiles hit enemies and skill cooldowns prevent repeat
     g.attack(true);
     return { rangerHp, mageHp, mana, afterRepeated: s.mana };
   });
-  expect(result.rangerHp).toBe(62);
-  expect(result.mageHp).toBe(54);
+  expect(result.rangerHp).toBe(106);
+  expect(result.mageHp).toBe(98);
   expect(result.mana).toBe(35);
   expect(result.afterRepeated).toBe(35);
 });
@@ -334,12 +323,12 @@ test("English localization works and new-game cancellation preserves the saved h
   await page.locator('[data-action="create"]').click();
   await expect(page.locator("h1")).toContainText("hero");
   await page.locator('[data-action="start"]').click();
-  await expect(page.locator("#class-label")).toHaveText("Warrior");
+  await expect(page.locator("#class-label")).toHaveText("Human · Warrior");
   await page.keyboard.press("Escape");
   await page.locator('[data-action="leave"]').click();
   await page.locator('[data-action="create"]').click();
   await expect(page.getByRole("dialog")).toContainText("one save slot");
   await page.locator('.modal-header [data-action="close"]').click();
   await page.locator('[data-action="continue"]').click();
-  await expect(page.locator("#class-label")).toHaveText("Warrior");
+  await expect(page.locator("#class-label")).toHaveText("Human · Warrior");
 });

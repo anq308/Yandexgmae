@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 async function begin(page, cls = "warrior", weapon) {
   await page.goto("/");
+  // Crits and random drops are disabled so damage checks stay deterministic.
+  await page.evaluate(() => (window.__ELDERIA__.game.rng = () => 0.99));
   await page.locator("[data-action=create]").click();
   await page.locator(`[data-class=${cls}]`).click();
   if (weapon) await page.locator(`[data-start-weapon=${weapon}]`).click();
@@ -8,7 +10,7 @@ async function begin(page, cls = "warrior", weapon) {
   await expect(page.locator("#hud")).toBeVisible();
 }
 
-test("bare start, backpack equipment, armor drag, stacks, crafting grid and saved layout", async ({
+test("armed start, backpack equipment, armor drag, stacks, crafting grid and saved layout", async ({
   page,
 }) => {
   const errors = [];
@@ -19,9 +21,12 @@ test("bare start, backpack equipment, armor drag, stacks, crafting grid and save
       const g = window.__ELDERIA__.game;
       return [g.save.equippedWeapon, g.save.equippedArmor, g.stats.damage];
     }),
-  ).toEqual([null, "none", 8]);
+  ).toEqual(["sword", "none", 16]);
   await page.keyboard.press("KeyI");
-  await expect(page.locator(".gear-cell.filled")).toHaveCount(0);
+  await expect(page.locator(".gear-cell.filled")).toHaveCount(1);
+  // Taking the sword off and dragging it back restores the damage.
+  await page.locator('[data-action="unequip-mainhand"]').click();
+  expect(await page.evaluate(() => window.__ELDERIA__.game.stats.damage)).toBe(8);
   await page
     .locator('[data-bag-key="w:sword"]')
     .dragTo(page.locator("[data-gear-slot=mainhand]"));
@@ -43,6 +48,7 @@ test("bare start, backpack equipment, armor drag, stacks, crafting grid and save
       () => window.__ELDERIA__.game.save.equippedWearables.head,
     ),
   ).toBe("linenCap");
+  await page.locator("[data-action=invTab-craft]").click();
   await page.locator("[data-action=recipe-rod]").click();
   await page.locator("[data-action=craftOutput]").click();
   expect(
@@ -54,6 +60,7 @@ test("bare start, backpack equipment, armor drag, stacks, crafting grid and save
   const before = await page.evaluate(
     () => window.__ELDERIA__.game.save.inventory.fiber,
   );
+  await page.locator("[data-action=invTab-gear]").click();
   await page
     .locator('[data-bag-key="i:fiber:0"]')
     .dragTo(page.locator('[data-bag-key="i:wood:0"]'));
@@ -76,7 +83,7 @@ test("bare start, backpack equipment, armor drag, stacks, crafting grid and save
   expect(errors).toEqual([]);
 });
 
-test("each acquisition source enforces requirements and ranks require hero levels without cast grinding", async ({
+test("abilities need only a skill point and the hero level; manuscripts grant points and mentors reset", async ({
   page,
 }) => {
   await begin(page);
@@ -84,78 +91,54 @@ test("each acquisition source enforces requirements and ranks require hero level
     const g = window.__ELDERIA__.game,
       s = g.save;
     g.equipWeapon("sword");
-    s.level = 6;
-    s.skillPoints = 15;
-    s.gold = 300;
     g.enemies = [];
     s.level = 2;
-    const noMastery = g.learnSkill(0);
+    s.skillPoints = 0;
+    const noPoint = g.learnSkill("bulwark");
+    s.skillPoints = 3;
+    const lowLevel = g.learnSkill("whirlwind");
+    const bulwark = g.learnSkill("bulwark");
     s.level = 6;
-    s.abilityUses.whirlwind = 0;
-    const rank2 = g.learnSkill(0);
-    const remoteMentor = g.learnSkill(1),
+    const whirl = g.learnSkill("whirlwind");
+    // A spear skill is learned while holding a sword: abilities belong to the class.
+    const spear = g.learnSkill("spearline");
+    s.inventory.warriorScroll = 1;
+    const read = g.readManuscript(),
+      pointsAfterRead = s.skillPoints;
+    const farReset = g.respecSkills(),
       o = g.world.objects.find((o) => o.id === "bladeMentor");
     s.x = o.x;
     s.y = o.y + 15;
-    const trained = g.learnSkill(1),
-      gold = s.gold;
-    const noTome = g.learnSkill(2);
-    s.inventory.warriorScroll = 1;
-    const tome = g.learnSkill(2),
-      scroll = s.inventory.warriorScroll;
-    const noQuest = g.learnSkill(3);
-    s.flags.smithQuestDone = true;
-    const quest = g.learnSkill(3);
-    const noCamp = g.learnSkill(4),
-      camp = g.world.objects.find((o) => o.id === "camp1");
-    s.x = camp.x;
-    s.y = camp.y + 20;
-    s.inventory.crystal = 3;
-    s.inventory.essence = 1;
-    const ritual = g.learnSkill(4);
-    s.ownedWeapons.push("spear");
-    g.equipWeapon("spear");
-    const noPractice = g.learnSkill(0);
-    s.weaponPractice.pole = 8;
-    const practice = g.learnSkill(0);
+    s.gold = 300;
+    const reset = g.respecSkills();
     return {
-      noMastery,
-      rank2,
-      remoteMentor,
-      trained,
-      gold,
-      noTome,
-      tome,
-      scroll,
-      noQuest,
-      quest,
-      noCamp,
-      ritual,
-      noPractice,
-      practice,
-      whirlwind: s.abilityRanks.whirlwind,
-      spear: s.abilityRanks.spearline,
-      crystals: s.inventory.crystal,
+      noPoint,
+      lowLevel,
+      bulwark,
+      whirl,
+      spear,
+      read,
+      pointsAfterRead,
+      farReset,
+      reset,
+      points: s.skillPoints,
+      ranks: Object.keys(s.abilityRanks).length,
+      gold: s.gold,
     };
   });
   expect(r).toEqual({
-    noMastery: false,
-    rank2: true,
-    remoteMentor: false,
-    trained: true,
-    gold: 240,
-    noTome: false,
-    tome: true,
-    scroll: 0,
-    noQuest: false,
-    quest: true,
-    noCamp: false,
-    ritual: true,
-    noPractice: false,
-    practice: true,
-    whirlwind: 2,
-    spear: 1,
-    crystals: 0,
+    noPoint: false,
+    lowLevel: false,
+    bulwark: true,
+    whirl: true,
+    spear: true,
+    read: true,
+    pointsAfterRead: 1,
+    farReset: false,
+    reset: true,
+    points: 5,
+    ranks: 0,
+    gold: 200,
   });
 });
 
@@ -172,8 +155,11 @@ test("ranger daggers grant real invisibility, reordered hotbars persist, cooldow
     g.save.mana = 200;
   });
   await page.keyboard.press("KeyK");
-  await expect(page.locator(".skill-node")).toHaveCount(5);
-  await expect(page.locator(".skill-tree")).toContainText(
+  // Five ranger schools plus class utilities; the daggers' own school opens first.
+  await expect(page.locator(".sb-school-tab")).toHaveCount(6);
+  await expect(page.locator(".sb-school-tab.active")).toContainText("+15%");
+  await expect(page.locator(".skill-card")).toHaveCount(3);
+  await expect(page.locator(".skill-card[data-ability=vanish]")).toContainText(
     "Раствориться в тени",
   );
   await page
@@ -212,7 +198,7 @@ test("ranger daggers grant real invisibility, reordered hotbars persist, cooldow
     const noReset = g.useSkill(1);
     s.ownedWeapons.push("bow");
     g.equipWeapon("bow");
-    const bowIds = g.save.hotbars.bow || [];
+    const bowIds = [...window.__ELDERIA__.barFor(s)];
     g.equipWeapon("daggers");
     const sameCD = g.skillCooldownAt(1) > 0;
     g.persist();
@@ -224,10 +210,12 @@ test("ranger daggers grant real invisibility, reordered hotbars persist, cooldow
   expect(r.damage).toBeGreaterThan(20);
   expect(r.noReset).toBe(false);
   expect(r.sameCD).toBe(true);
+  // One class bar: switching weapons keeps the same abilities in place.
+  expect(r.bowIds[1]).toBe("vanish");
   await page.reload();
   await page.locator("[data-action=continue]").click();
   expect(
-    await page.evaluate(() => window.__ELDERIA__.game.save.hotbars.blades[1]),
+    await page.evaluate(() => window.__ELDERIA__.game.save.hotbars.main[1]),
   ).toBe("vanish");
 });
 
@@ -348,6 +336,11 @@ test("real weapon schools produce different attacks, elements, statuses and effe
       };
       g.enemies = [e];
       const cast = g.useSkill(0);
+      // A shapeshifter's first ability is a transformation: attack in the new form.
+      if (g.form) {
+        g.attackCooldown = 0;
+        g.attack();
+      }
       for (let i = 0; i < 15; i++) g.update(0.03);
       out.push({
         id,
@@ -362,7 +355,7 @@ test("real weapon schools produce different attacks, elements, statuses and effe
     g.paused = true;
     return out;
   });
-  expect(results).toHaveLength(39);
+  expect(results).toHaveLength(126);
   for (const r of results) {
     expect(r.cast, r.id).toBe(true);
     expect(r.hp, r.id).toBeLessThan(2000);
@@ -420,6 +413,8 @@ test("all five slots and inventory remain usable on portrait and landscape phone
           document.querySelector(".modal").clientWidth + 1,
       ),
     ).toBe(true);
+    // The starting sword is already in hand: take it off, then equip it from the bag.
+    await page.locator("[data-gear-slot=mainhand]").click();
     await page.locator('[data-bag-key="w:sword"]').click();
     await page.locator('.bag-description [data-action="equip-sword"]').click();
     expect(

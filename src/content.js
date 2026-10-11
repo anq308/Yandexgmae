@@ -10,7 +10,7 @@ export const dungeons = {
     boss: "boneKing",
     color: "#bda7dc",
     mobs: ["skeleton", "bat", "revenant"],
-    loot: { warrior: "hammer", ranger: "shadowdaggers", mage: "emberstaff" },
+    loot: { warrior: "hammer", ranger: "shadowdaggers", mage: "emberstaff", paladin: "requiemMace", necromancer: "kingScepter" },
     armor: "grave",
     portal: "cryptPortal",
   },
@@ -25,7 +25,7 @@ export const dungeons = {
     boss: "frostTyrant",
     color: "#9eddef",
     mobs: ["golem", "skeleton", "shaman"],
-    loot: { warrior: "frostSpear", ranger: "moonbow", mage: "tidestaff" },
+    loot: { warrior: "frostSpear", ranger: "moonbow", mage: "tidestaff", paladin: "glacierMaul", necromancer: "rimeStaff" },
     armor: "frost",
     portal: "minePortal",
   },
@@ -40,7 +40,7 @@ export const dungeons = {
     boss: "broodQueen",
     color: "#b7d385",
     mobs: ["spider", "shaman", "revenant"],
-    loot: { warrior: "flameblade", ranger: "venombow", mage: "voidstaff" },
+    loot: { warrior: "flameblade", ranger: "venombow", mage: "voidstaff", paladin: "purifierCenser", necromancer: "broodWand" },
     armor: "ember",
     portal: "abyssPortal",
   },
@@ -55,7 +55,7 @@ export const dungeons = {
     boss: "stormLord",
     color: "#dbb9fb",
     mobs: ["sentinel", "revenant", "shaman"],
-    loot: { warrior: "titanblade", ranger: "stormbow", mage: "thunderwand" },
+    loot: { warrior: "titanblade", ranger: "stormbow", mage: "thunderwand", paladin: "heavenHammer", necromancer: "stormScythe" },
     armor: "storm",
     portal: "citadelPortal",
   },
@@ -67,6 +67,7 @@ export const bossNames = {
   frostTyrant: ["Ледяной тиран", "Frost Tyrant"],
   broodQueen: ["Матка глубин", "Brood Queen"],
   stormLord: ["Повелитель бури", "Storm Lord"],
+  eclipse: ["Нерей Бессветный", "Nerei the Lightless"],
 };
 export const mobNames = {
   slime: ["Лесной слизень", "Woodland slime"],
@@ -80,6 +81,17 @@ export const mobNames = {
   spider: ["Ядовитый паук", "Venom spider"],
   shaman: ["Шаман разлома", "Rift shaman"],
   revenant: ["Восставший", "Revenant"],
+  shade: ["Тень затмения", "Eclipse shade"],
+  herald: ["Вестник затмения", "Eclipse herald"],
+  boar: ["Дикий кабан", "Wild boar"],
+  lumberjack: ["Дровосек-разбойник", "Outlaw woodcutter"],
+  treantling: ["Молодой энт", "Treantling"],
+  crab: ["Гигантский краб", "Giant crab"],
+  sandGolem: ["Песчаный голем", "Sand golem"],
+  toad: ["Болотная жаба", "Bog toad"],
+  yeti: ["Йети", "Yeti"],
+  ghoul: ["Гуль", "Ghoul"],
+  scorpion: ["Пустынный скорпион", "Desert scorpion"],
   ...bossNames,
 };
 export const contracts = [
@@ -244,11 +256,17 @@ export function contractProgress(save, q) {
   if (q.kind === "night") return save.nightKills || 0;
   return save.dungeonClears[q.target] || 0;
 }
-export function dungeonAccess(save, id) {
+// Dungeon difficulties: higher level gates, tougher foes, richer spoils.
+export const difficulties = [
+  { name: ["Обычный", "Normal"], level: 0, hp: 1, damage: 1, loot: 0, essence: 1 },
+  { name: ["Героический", "Heroic"], level: 4, hp: 1.7, damage: 1.4, loot: 1, essence: 1.5 },
+  { name: ["Кошмар", "Nightmare"], level: 8, hp: 2.6, damage: 1.9, loot: 2, essence: 2.2 },
+];
+export function dungeonAccess(save, id, difficulty = 0) {
   const d = dungeons[id];
   return (
     !!d &&
-    save.level >= d.level &&
+    save.level >= d.level + (difficulties[difficulty]?.level ?? 99) &&
     (id !== "citadel" ||
       ["crypt", "mine", "abyss"].every((key) => save.dungeonClears[key] > 0))
   );

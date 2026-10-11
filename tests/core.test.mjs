@@ -69,22 +69,18 @@ test("newer valid cloud or local data wins without wiping a valid local save", (
   assert.equal(chooseSave(fresh, { bad: true }).updatedAt, 20);
   assert.equal(chooseSave(null, fresh).updatedAt, 20);
 });
-test("main quests count gathered resources even after they are crafted or donated", () => {
+test("obelisks answer only at their chapter and every chapter has a journal entry", () => {
   const s = newSave("Hero", "warrior", {});
-  s.quest = 1;
-  s.kills.slime = 5;
   s.collected = ["herb0", "herb1", "herb2"];
-  s.inventory.herb = 0;
   assert.equal(countGathered(s, "herb"), 3);
+  s.quest = 1;
   assert.ok(canActivate(s, "forestRune"));
   assert.equal(questInfo(s).target, "forestRune");
   s.quest = 3;
-  s.kills.golem = 3;
-  s.collected.push("crystal0", "crystal1", "crystal2");
   assert.ok(canActivate(s, "mountainRune"));
   s.quest = 0;
   assert.equal(canActivate(s, "mountainRune"), false);
-  for (let quest = 0; quest <= 7; quest++) {
+  for (let quest = 0; quest <= 11; quest++) {
     s.quest = quest;
     assert.ok(questInfo(s).title);
     assert.ok(questInfo(s).steps.length);
@@ -138,19 +134,22 @@ test("weapons provide distinct reach, damage and mobility while skills enforce p
       deriveStats(r, classes.ranger).speed,
   );
   s.skillPoints = 4;
-  assert.equal(upgradeSkill(s, 1), false);
+  assert.equal(upgradeSkill(s, "bulwark"), false);
   assert.equal(s.skillPoints, 4);
   s.level = 2;
-  assert.equal(upgradeSkill(s, 1), true);
-  assert.equal(s.skillRanks[1], 1);
-  assert.equal(upgradeSkill(s, 2), false);
-  assert.equal(upgradeSkill(s, 0), false);
+  assert.equal(upgradeSkill(s, "bulwark"), true);
+  assert.equal(s.abilityRanks.bulwark, 1);
+  assert.equal(upgradeSkill(s, "charge"), false);
+  assert.equal(upgradeSkill(s, "whirlwind"), false);
   s.level = 3;
-  assert.equal(upgradeSkill(s, 0), true);
-  assert.equal(upgradeSkill(s, 0), false);
-  s.level = 6;
-  assert.equal(upgradeSkill(s, 0), true);
-  assert.equal(upgradeSkill(s, 0), false);
+  assert.equal(upgradeSkill(s, "whirlwind"), false);
+  s.level = 4;
+  assert.equal(upgradeSkill(s, "whirlwind"), true);
+  assert.equal(upgradeSkill(s, "whirlwind"), false);
+  s.level = 8;
+  assert.equal(upgradeSkill(s, "whirlwind"), true);
+  assert.equal(upgradeSkill(s, "whirlwind"), false);
+  assert.equal(upgradeSkill(s, "volley"), false);
   assert.equal(s.skillPoints, 1);
 });
 

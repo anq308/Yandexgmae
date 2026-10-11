@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 async function begin(page, cls = "warrior") {
   await page.goto("/");
+  // Crits and random drops are disabled so damage checks stay deterministic.
+  await page.evaluate(() => (window.__ELDERIA__.game.rng = () => 0.99));
   await page.locator("[data-action=create]").click();
   await page.locator(`[data-class=${cls}]`).click();
   await page.locator("[data-action=start]").click();
@@ -360,7 +362,7 @@ test("rain reduces actual fire skill damage and potion cooldown survives reopeni
     e.cooldown = 999;
     g.enemies = [e];
     g.save.level = 4;
-    g.save.skillRanks = [1, 0, 1];
+    window.__ELDERIA__.barFor(g.save).slice(0, 3).forEach((id, i) => (g.save.abilityRanks[id] = [1, 0, 1][i]));
     g.save.mana = g.stats.maxMana;
     g.save.playtime = 0;
     g.useSkill(2);
@@ -380,7 +382,8 @@ test("rain reduces actual fire skill damage and potion cooldown survives reopeni
     g.persist();
     return { clear, rain, cooldown: g.potionCooldown };
   });
-  expect(r.rain).toBeCloseTo(r.clear * 0.7, 0);
+  // Damage is rounded per hit, so allow one point of difference.
+  expect(Math.abs(r.rain - r.clear * 0.7)).toBeLessThanOrEqual(1);
   expect(r.cooldown).toBe(8);
   await page.reload();
   await page.locator("[data-action=continue]").click();

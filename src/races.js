@@ -1,0 +1,78 @@
+// Playable races: each has its own look, skin palette and permanent bonuses.
+export const races = {
+  human: {
+    name: ["Человек", "Human"],
+    desc: ["Упорные и находчивые. Быстрее учатся и лучше торгуются.", "Driven and resourceful. They learn faster and bargain better."],
+    perks: [["+10% опыта", "+10% experience"], ["+10% золота", "+10% gold"]],
+    skins: ["#e9b88a", "#d9a175", "#b77e59", "#815b46"],
+    xp: 1.1,
+    gold: 1.1,
+  },
+  elf: {
+    name: ["Эльф", "Elf"],
+    desc: ["Лёгкие и зоркие дети лесов. Больше энергии и точнее удары.", "Light, sharp-eyed children of the woods. More energy and keener strikes."],
+    perks: [["+25 энергии", "+25 energy"], ["+5% крита", "+5% crit"], ["+8 к скорости", "+8 speed"]],
+    skins: ["#f2d2b4", "#e8c0a0", "#c9a07c", "#a8b8c8"],
+    mana: 25,
+    crit: 0.05,
+    speed: 8,
+  },
+  dwarf: {
+    name: ["Гном", "Dwarf"],
+    desc: ["Крепкие горняки подземных городов. Выносливы и закалены.", "Sturdy miners of the deep halls. Tough and hardened."],
+    perks: [["+30 здоровья", "+30 health"], ["+5 защиты", "+5 defense"], ["−4 к скорости", "−4 speed"]],
+    skins: ["#e2aa84", "#c98f6a", "#a87050", "#7a5038"],
+    hp: 30,
+    defense: 5,
+    speed: -4,
+    short: true,
+  },
+  orc: {
+    name: ["Орк", "Orc"],
+    desc: ["Свирепые воины пустошей. Бьют сильнее, но хуже чувствуют магию.", "Fierce warriors of the badlands. They hit harder but feel magic less."],
+    perks: [["+12% урона", "+12% damage"], ["+20 здоровья", "+20 health"], ["−15 энергии", "−15 energy"]],
+    skins: ["#7fa25a", "#6a8f4a", "#58783e", "#8a9a6a"],
+    damage: 0.12,
+    hp: 20,
+    mana: -15,
+  },
+  undead: {
+    name: ["Нежить", "Undead"],
+    desc: ["Восставшие из склепов, сохранившие разум. Яд им не страшен, раны медленно затягиваются.", "Risen from the crypts with their minds intact. Poison cannot harm them and wounds slowly close."],
+    perks: [["Иммунитет к яду", "Poison immunity"], ["Регенерация 1% HP/с", "1% HP/s regeneration"], ["−10 здоровья", "−10 health"]],
+    skins: ["#a8b4a0", "#8a9a8c", "#9aa0b0", "#7a8478"],
+    hp: -10,
+    regen: 0.01,
+    poisonImmune: true,
+  },
+};
+Object.assign(races, {
+  beastkin: {
+    name: ["Зверолюд", "Beastkin"],
+    desc: ["Дети леса с повадками хищников. Быстры, чутки и бьют в слабое место.", "Children of the wild with a predator's ways. Fast, keen and quick to find a weak spot."],
+    perks: [["+12 к скорости", "+12 speed"], ["+6% крита", "+6% crit"], ["−10 энергии", "−10 energy"]],
+    skins: ["#d8a878", "#c08a5a", "#a87048", "#e8c8a0"],
+    speed: 12,
+    crit: 0.06,
+    mana: -10,
+  },
+  demonkin: {
+    name: ["Демонид", "Demonkin"],
+    desc: ["Потомки древнего договора с тьмой. Рога, горячая кровь и сильная магия.", "Descendants of an ancient pact with darkness. Horns, hot blood and strong magic."],
+    perks: [["+8% урона", "+8% damage"], ["+20 энергии", "+20 energy"], ["−15 здоровья", "−15 health"]],
+    skins: ["#c86a5a", "#a84a4a", "#8a5a8a", "#d89a7a"],
+    damage: 0.08,
+    mana: 20,
+    hp: -15,
+  },
+  lizardfolk: {
+    name: ["Ящеролюд", "Lizardfolk"],
+    desc: ["Болотный народ в прочной чешуе. Раны затягиваются, удары скользят по шкуре.", "Marsh folk in tough scales. Wounds close and blows glance off their hide."],
+    perks: [["+4 защиты", "+4 defense"], ["Регенерация 0,5% HP/с", "0.5% HP/s regeneration"], ["−4 к скорости", "−4 speed"]],
+    skins: ["#6a9a5a", "#5a8a6a", "#7aa070", "#4a7a5a"],
+    defense: 4,
+    regen: 0.005,
+    speed: -4,
+  },
+});
+export const raceOf = (save) => races[save?.race] || races.human;

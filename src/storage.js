@@ -9,18 +9,22 @@ import { wearables, emptyWearables } from "./gear.js";
 import { classes } from "./i18n.js";
 import { TILE, WIDTH, HEIGHT, point } from "./world.js";
 import { defaultWeapon, weapons, armors } from "./equipment.js";
+import { interiorDefs } from "./interiors.js";
+import { races } from "./races.js";
 export const SAVE_KEY = "elderia-save-v1";
 export function newSave(
   name,
   characterClass,
   appearance,
   selectedWeapon = defaultWeapon(characterClass),
+  race = "human",
 ) {
   const c = classes[characterClass];
   return {
     version: 1,
     updatedAt: Date.now(),
     name,
+    race: races[race] ? race : "human",
     characterClass,
     appearance,
     ...point(24, 63),
@@ -49,10 +53,20 @@ export function newSave(
       warriorScroll: 0,
       rangerScroll: 0,
       mageScroll: 0,
+      paladinScroll: 0,
+      necromancerScroll: 0,
+      summonerScroll: 0,
+      shapeshifterScroll: 0,
+      monkScroll: 0,
+      engineerScroll: 0,
     },
     weaponLevel: 0,
     potionCooldown: 0,
-    equippedWeapon: null,
+    // The chosen starting weapon is already in hand.
+    equippedWeapon:
+      weapons[selectedWeapon]?.class === characterClass
+        ? selectedWeapon
+        : defaultWeapon(characterClass),
     ownedWeapons: [
       weapons[selectedWeapon]?.class === characterClass
         ? selectedWeapon
@@ -106,6 +120,8 @@ export function newSave(
       spider: 0,
       shaman: 0,
       revenant: 0,
+      shade: 0,
+      herald: 0,
     },
     collected: [],
     defeated: [],
@@ -189,6 +205,22 @@ export function validateSave(input) {
     )
   )
     return null;
+  if (!races[s.race]) s.race = "human";
+  // Story state: keep only well-formed data so a damaged save cannot break the scenes.
+  if (!s.story || typeof s.story !== "object" || Array.isArray(s.story)) s.story = {};
+  for (const k of ["dawn", "dusk", "trust"]) if (!Number.isFinite(s.story[k])) delete s.story[k];
+  for (const k of ["knows", "fate", "mods"]) if (!s.story[k] || typeof s.story[k] !== "object") delete s.story[k];
+  for (const k of ["seen", "log"]) if (!Array.isArray(s.story[k])) delete s.story[k];
+  if (s.story.wave && typeof s.story.wave.anchor !== "string") s.story.wave = null;
+  s.interior ??= null;
+  if (
+    s.interior &&
+    (!interiorDefs[s.interior.id] ||
+      s.activeDungeon ||
+      !Number.isFinite(s.interior.returnPoint?.x) ||
+      !Number.isFinite(s.interior.returnPoint?.y))
+  )
+    s.interior = null;
   if (s.activeDungeon) {
     const d = s.activeDungeon,
       limits = { crypt: 3, mine: 3, abyss: 4, citadel: 4 };
@@ -202,6 +234,7 @@ export function validateSave(input) {
       !Number.isFinite(d.tier) ||
       d.tier < 0 ||
       d.tier > 6 ||
+      ![undefined, 0, 1, 2].includes(d.difficulty) ||
       !Number.isFinite(d.returnPoint?.x) ||
       !Number.isFinite(d.returnPoint?.y)
     )
@@ -259,17 +292,12 @@ export function validateSave(input) {
   )
     return null;
   if (
-    !Object.entries(s.hotbars).every(
-      ([p, ids]) =>
-        disciplines[p]?.class === s.characterClass &&
+    !Object.values(s.hotbars).every(
+      (ids) =>
         Array.isArray(ids) &&
         ids.length === 5 &&
         new Set(ids).size === 5 &&
-        ids.every((id) =>
-          [...disciplines[p].ids, ...utilitySkills[s.characterClass]].includes(
-            id,
-          ),
-        ),
+        ids.every((id) => abilityCatalog[id]?.class === s.characterClass),
     )
   )
     return null;
@@ -353,7 +381,7 @@ export function validateSave(input) {
     s.level > 50 ||
     s.gold < 0 ||
     s.quest < 0 ||
-    s.quest > 7
+    s.quest > 11
   )
     return null;
   for (const key of Object.keys(base.inventory))

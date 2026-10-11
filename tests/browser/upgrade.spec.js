@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 async function begin(page, cls = "warrior", weapon) {
   await page.goto("/");
+  // Crits and random drops are disabled so damage checks stay deterministic.
+  await page.evaluate(() => (window.__ELDERIA__.game.rng = () => 0.99));
   await page.locator("[data-action=create]").click();
   await page.locator(`[data-class=${cls}]`).click();
   if (weapon) await page.locator(`[data-start-weapon=${weapon}]`).click();
@@ -41,8 +43,8 @@ test("starter weapons and smith purchases change real attacks and persist after 
   await page.locator("[data-action=equip-spear]").click();
   await page.locator("[data-action=close]").first().click();
   await page.keyboard.press("KeyI");
-  await page.locator(".inventory-details summary").click();
-  await page.locator("[data-action=equip-greatsword]").click();
+  await page.locator('[data-bag-key="w:greatsword"]').click();
+  await page.locator('.bag-description [data-action="equip-greatsword"]').click();
   await page.reload();
   await page.locator("[data-action=continue]").click();
   const result = await page.evaluate(() => {
@@ -81,9 +83,9 @@ test("skill book unlocks abilities and defense, cooldowns and collision-safe cha
     g.save.mana = g.stats.maxMana;
   });
   await page.keyboard.press("KeyK");
-  await page.locator("[data-action=learn-1]").click();
-  await page.locator("[data-action=learn-2]").click();
-  await page.locator("[data-action=learn-0]").click();
+  await page.locator("[data-action=learn-bulwark]").click();
+  await page.locator("[data-action=learn-charge]").click();
+  await page.locator("[data-action=learn-whirlwind]").click();
   await expect(page.locator(".skills-intro strong")).toContainText("0");
   await page.locator("[data-action=close]").first().click();
   const result = await page.evaluate(() => {
@@ -114,7 +116,7 @@ test("skill book unlocks abilities and defense, cooldowns and collision-safe cha
     g.respawn();
     g.paused = true;
     return {
-      ranks: g.save.skillRanks,
+      ranks: ["whirlwind", "bulwark", "charge"].map((id) => g.save.abilityRanks[id]),
       protectedDamage,
       repeat,
       spentAgain,
@@ -145,7 +147,7 @@ test("frost slows targets and meteor damage occurs only after its warning", asyn
     g.setPaused(true);
     g.paused = false;
     g.save.level = 4;
-    g.save.skillRanks = [1, 1, 1];
+    window.__ELDERIA__.barFor(g.save).slice(0, 3).forEach((id, i) => (g.save.abilityRanks[id] = [1, 1, 1][i]));
     g.save.mana = g.stats.maxMana;
     const e = {
       ...g.enemies.find((e) => e.type === "slime"),
@@ -191,7 +193,7 @@ test("crossbow pierces two targets and bow hunter marks increase damage without 
     g.controls.autoAim = false;
     g.pointer = { x: g.save.x + 150, y: g.save.y };
     g.save.level = 4;
-    g.save.skillRanks = [1, 1, 1];
+    window.__ELDERIA__.barFor(g.save).slice(0, 3).forEach((id, i) => (g.save.abilityRanks[id] = [1, 1, 1][i]));
     g.save.mana = g.stats.maxMana;
     const base = g.enemies.find((e) => e.type === "slime");
     g.enemies = [45, 85].map((dx, i) => ({
@@ -210,7 +212,7 @@ test("crossbow pierces two targets and bow hunter marks increase damage without 
     const pierced = g.enemies.map((e) => 1000 - e.hp);
     g.save.ownedWeapons.push("bow");
     g.equipWeapon("bow");
-    g.save.skillRanks = [1, 1, 1];
+    window.__ELDERIA__.barFor(g.save).slice(0, 3).forEach((id, i) => (g.save.abilityRanks[id] = [1, 1, 1][i]));
     g.useSkill(2);
     const hp = g.enemies[0].hp;
     g.damageEnemy(g.enemies[0], 20);
@@ -224,7 +226,8 @@ test("crossbow pierces two targets and bow hunter marks increase damage without 
     return { damage, pierced, markedDamage, empty, spent };
   });
   expect(result.pierced).toEqual([result.damage, result.damage]);
-  expect(result.markedDamage).toBe(30);
+  // Hunter mark +50% with the bow school bonus (+15%) applied to the mark.
+  expect(result.markedDamage).toBe(32);
   expect(result.empty).toBe(false);
   expect(result.spent).toBe(false);
 });
@@ -434,7 +437,7 @@ test("melee combos, traps and enemy warning projectiles affect combat", async ({
     g.load(newSave("Hunter", "ranger", {}));
     g.equipWeapon("bow");
     g.save.level = 2;
-    g.save.skillRanks = [1, 1, 0];
+    window.__ELDERIA__.barFor(g.save).slice(0, 3).forEach((id, i) => (g.save.abilityRanks[id] = [1, 1, 0][i]));
     g.save.mana = g.stats.maxMana;
   });
   const trap = await page.evaluate(() => {

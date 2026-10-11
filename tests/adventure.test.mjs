@@ -13,17 +13,24 @@ import { createDungeon } from "../src/dungeons.js";
 import { findPath, canWalk, point, WIDTH, HEIGHT } from "../src/world.js";
 import { climateAt, elementMultiplier } from "../src/climate.js";
 import { hazardHits, expandedEnemyStats, makeEnemy } from "../src/battle.js";
-test("new heroes have no armor, each class has thirteen weapons and boss equipment is excluded from creation", () => {
-  assert.equal(Object.keys(weapons).length, 39);
-  assert.equal(Object.keys(armors).length, 10);
+test("new heroes have no armor, every class has a full arsenal and boss equipment is excluded from creation", () => {
+  assert.equal(Object.keys(weapons).length, 126);
+  assert.equal(Object.keys(armors).length, 16);
+  // Every class has exactly one mythic weapon, and mythic gear is locked behind named bosses.
+  const mythic = Object.values(weapons).filter((w) => w.rarity === "mythic");
+  assert.deepEqual(mythic.map((w) => w.class).sort(), Object.keys(classes).sort());
+  for (const item of [...mythic, armors.dragon, armors.abyss, armors.seraph]) {
+    assert.ok(item.requires?.length >= 2 && item.level >= 18 && item.recipe && !item.price);
+    assert.ok(Object.values(item.recipe).reduce((a, b) => a + b, 0) >= 60);
+  }
   for (const cls of Object.keys(classes)) {
     const s = newSave("Hero", cls, {});
     assert.equal(s.equippedArmor, "none");
     assert.deepEqual(s.ownedArmors, ["none"]);
     assert.equal(deriveStats(s, classes[cls]).defense, 0);
     assert.equal(
-      Object.values(weapons).filter((w) => w.class === cls).length,
-      13,
+      Object.values(weapons).filter((w) => w.class === cls).length >= 11,
+      true,
     );
     assert.equal(starterWeapons(cls).length, 3);
   }
@@ -83,12 +90,19 @@ test("weather, time and dungeon climate change combat parameters", () => {
   const night = climateAt(s);
   assert.ok(night.night);
   assert.equal(night.enemyDamage, 1.2);
-  assert.equal(night.xp, 1.15);
+  assert.equal(night.season, "spring");
+  assert.ok(Math.abs(night.xp - 1.15 * 1.05) < 1e-9);
   const cave = climateAt(s, "mine", "mine");
   assert.equal(cave.enemyDamage, 1);
   assert.equal(cave.weather, "snow");
   s.playtime = 360;
   assert.equal(climateAt(s).aggro, 150);
+  // Seasons rotate every two days; winter brings snow and short days.
+  const seasons = [0, 1, 2, 3].map((k) => climateAt({ playtime: k * 1800 + 60 }).season);
+  assert.deepEqual(seasons, ["spring", "summer", "autumn", "winter"]);
+  const winter = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => climateAt({ playtime: 3 * 1800 + 60 + k * 180 }).weather);
+  assert.ok(winter.filter((w) => w === "snow").length >= 4);
+  assert.ok(climateAt({ playtime: 1800 + 450 }).dark === 0);
 });
 test("telegraph geometry leaves a safe inner ring and permits sidestepping beams and cones", () => {
   const ring = { shape: "ring", x: 0, y: 0, radius: 195, inner: 100 };
