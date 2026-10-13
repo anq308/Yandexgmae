@@ -1009,3 +1009,682 @@ html.m-land .vn-portrait span {
 html.m-land .vn-center {
   padding: 8px 10px !important;
 }
+
+/* ==========================================================================
+   Windows on phones: dense, thumb-sized and easy to scroll.
+   ========================================================================== */
+html.m .modal-body {
+  font-size: 15px;
+}
+html.m .modal-body h3 {
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+}
+html.m .modal-body p,
+html.m .modal-body li {
+  line-height: 1.35 !important;
+}
+html.m .modal-body .button {
+  min-height: 38px !important;
+  padding: 7px 12px !important;
+  font-size: 15px !important;
+  gap: 8px !important;
+}
+html.m .modal-body .button .icon {
+  width: 16px !important;
+  height: 16px !important;
+}
+/* Tab rows scroll sideways instead of wrapping into tall blocks. */
+html.m .vendor-tabs,
+html.m .bag-filters,
+html.m .journal-tabs,
+html.m .inv-tabs,
+html.m .sb-schools {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  gap: 6px !important;
+  padding-bottom: 4px !important;
+  margin-bottom: 8px !important;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  height: auto !important;
+}
+html.m .vendor-tabs::-webkit-scrollbar,
+html.m .bag-filters::-webkit-scrollbar,
+html.m .journal-tabs::-webkit-scrollbar,
+html.m .sb-schools::-webkit-scrollbar {
+  display: none;
+}
+html.m .modal-body .recipe-chip {
+  flex: 0 0 auto !important;
+  min-height: 34px !important;
+  padding: 5px 10px !important;
+  font-size: 15px !important;
+  white-space: nowrap !important;
+  gap: 6px !important;
+}
+html.m .modal-body .recipe-chip .icon {
+  width: 16px !important;
+  height: 16px !important;
+}
+html.m .inventory-heading {
+  margin-bottom: 6px !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+}
+html.m .inventory-gold {
+  font-size: 15px !important;
+}
+html.m .inventory-gold .icon {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* ---------- Skill book ---------- */
+html.m .skills-intro.sb-head {
+  margin-bottom: 8px !important;
+}
+html.m .skills-intro.sb-head strong {
+  min-width: 0 !important;
+  padding: 4px 8px !important;
+  font-size: 15px !important;
+  line-height: 1.1 !important;
+}
+html.m .skills-intro.sb-head strong small {
+  font-size: 10px !important;
+}
+html.m .skills-intro.sb-head .sb-crest .icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+html.m .sb2.skill-layout {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+html.m .sb-school-tab {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 5px 8px !important;
+  gap: 6px !important;
+}
+html.m .sb-tab-icon {
+  width: 28px !important;
+  height: 28px !important;
+}
+html.m .sb-tab-icon .icon {
+  width: 18px !important;
+  height: 18px !important;
+}
+html.m .sb-tab-text b {
+  font-size: 15px !important;
+  white-space: nowrap;
+}
+html.m .sb-tab-text small {
+  font-size: 10px !important;
+  white-space: nowrap;
+}
+html.m .skill-school {
+  padding: 8px !important;
+}
+html.m .school-title {
+  font-size: 15px !important;
+  margin-bottom: 6px !important;
+  padding-bottom: 6px !important;
+}
+html.m .school-title .affinity {
+  font-size: 10px !important;
+}
+html.m .skill-grid.sb-path {
+  gap: 6px !important;
+}
+html.m .sb-step {
+  gap: 0 !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  display: block !important;
+}
+html.m .sb-step-num,
+html.m .sb-path::before {
+  display: none !important;
+}
+html.m .skill-card {
+  padding: 6px !important;
+  gap: 8px !important;
+  min-height: 0 !important;
+}
+html.m .skill-card .skill-node-text {
+  gap: 2px !important;
+}
+html.m .skill-card p {
+  font-size: 10px !important;
+  margin: 0 !important;
+}
+html.m .skill-card > :first-child {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+}
+html.m .skill-card svg.icon {
+  width: 28px !important;
+  height: 28px !important;
+}
+html.m .mastery-grid {
+  gap: 8px !important;
+}
+html.m .mastery-grid > div {
+  padding: 8px !important;
+}
+html.m .sb-bar {
+  padding: 8px !important;
+  gap: 6px !important;
+}
+html.m .sb-bar-title small {
+  display: none !important;
+}
+html.m .ability-bar-editor {
+  gap: 6px !important;
+}
+html.m .bar-edit-slot {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 0 !important;
+}
+html.m .bar-edit-slot kbd {
+  display: none !important;
+}
+/* Portrait: the chosen ability sits in a bottom sheet with its learn button,
+   so there is no need to scroll down to the end of the book. */
+html.m-port .sb-side .skill-detail {
+  position: fixed !important;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  max-height: 38dvh;
+  overflow-y: auto;
+  margin: 0 !important;
+  padding: 8px calc(10px + var(--safe-r)) calc(8px + var(--safe-b)) calc(10px + var(--safe-l)) !important;
+  background: #1a1410 !important;
+  box-shadow: 0 -2px 0 var(--gold), 0 -10px 24px #000000a0 !important;
+  gap: 6px !important;
+}
+html.m-port .modal.skills .modal-body {
+  padding-bottom: calc(40dvh + 12px) !important;
+}
+html.m .skill-detail .detail-icon {
+  width: 36px !important;
+  height: 36px !important;
+}
+html.m .skill-detail .detail-icon .icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+html.m .skill-detail p,
+html.m .skill-detail li,
+html.m .detail-costs,
+html.m .detail-costs * {
+  font-size: 10px !important;
+}
+html.m .skill-detail .button {
+  width: 100%;
+}
+/* Landscape: schools, the path and the details side by side. */
+html.m-land .sb2.skill-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.62fr) !important;
+  align-items: start;
+}
+html.m-land .sb-schools {
+  grid-column: 1 / -1;
+}
+html.m-land .sb-side {
+  position: sticky;
+  top: 0;
+  max-height: calc(100dvh - 60px);
+  overflow-y: auto;
+}
+html.m-land .skills-intro.sb-head {
+  padding: 4px 8px !important;
+}
+
+/* ---------- Backpack ---------- */
+html.m .inv-layout {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+html.m .doll-panel,
+html.m .bag-panel {
+  padding: 8px !important;
+}
+html.m .paperdoll2 {
+  gap: 6px !important;
+  justify-content: center !important;
+  height: auto !important;
+}
+html.m .doll-col {
+  gap: 4px !important;
+  width: auto !important;
+}
+html.m .gear-cell {
+  width: 62px !important;
+  height: 54px !important;
+  min-height: 0 !important;
+  padding: 3px !important;
+  gap: 2px !important;
+}
+html.m .gear-cell .icon {
+  width: 22px !important;
+  height: 22px !important;
+}
+html.m .gear-cell small {
+  font-size: 10px !important;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html.m #paperdoll {
+  width: 112px !important;
+  height: 133px !important;
+  align-self: center;
+}
+html.m .char-sheet {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 4px !important;
+  margin-top: 6px !important;
+}
+html.m .char-sheet > span {
+  padding: 4px !important;
+  min-height: 0 !important;
+  gap: 4px !important;
+}
+html.m .char-sheet .icon {
+  width: 14px !important;
+  height: 14px !important;
+}
+html.m .char-sheet small {
+  font-size: 10px !important;
+}
+html.m .char-sheet b {
+  font-size: 15px !important;
+}
+html.m .block-backpack {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 4px !important;
+  padding: 4px !important;
+}
+html.m .block-backpack .bag-cell {
+  min-height: 0 !important;
+  aspect-ratio: 1 !important;
+  padding: 2px !important;
+}
+html.m .block-backpack .bag-cell .icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+/* The selected item and its button stay in view under the grid. */
+html.m .bag-description {
+  position: sticky !important;
+  bottom: 0;
+  z-index: 3;
+  padding: 8px !important;
+  gap: 6px !important;
+  background: #15100c !important;
+  box-shadow: 0 -2px 0 #5b4527 !important;
+}
+html.m .bag-description h3 {
+  font-size: 15px !important;
+}
+html.m .bag-description p {
+  font-size: 10px !important;
+  margin: 2px 0 0 !important;
+}
+html.m-land .inv-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) !important;
+  align-items: start;
+}
+html.m-land .block-backpack {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+}
+/* Crafting bench */
+html.m .small-workbench {
+  padding: 8px !important;
+}
+html.m .craft-layout {
+  gap: 6px !important;
+}
+html.m .craft-cells .bag-cell,
+html.m .craft-output {
+  width: 52px !important;
+  height: 52px !important;
+  min-height: 0 !important;
+}
+html.m .recipe-list {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+  gap: 4px !important;
+}
+html.m .recipe-list .recipe-chip {
+  white-space: normal !important;
+}
+
+/* ---------- Shops ---------- */
+html.m .vendor-head {
+  gap: 8px !important;
+  padding: 0 !important;
+  margin-bottom: 6px !important;
+  align-items: center !important;
+}
+html.m .vendor-head canvas {
+  width: 44px !important;
+  height: 44px !important;
+}
+html.m .vendor-head p {
+  font-size: 10px !important;
+}
+html.m .vendor-quest {
+  padding: 6px 8px !important;
+  gap: 6px !important;
+}
+html.m .vendor-layout {
+  gap: 8px !important;
+}
+html.m .vendor-list {
+  max-height: 34dvh !important;
+}
+html.m .vendor-row,
+html.m .vendor-list > * {
+  padding: 5px 6px !important;
+  min-height: 0 !important;
+  gap: 6px !important;
+}
+html.m .vendor-list .icon {
+  width: 20px !important;
+  height: 20px !important;
+}
+html.m .vendor-list b,
+html.m .vendor-list strong {
+  font-size: 15px !important;
+}
+html.m .vendor-list small {
+  font-size: 10px !important;
+}
+html.m .gear-card {
+  padding: 8px !important;
+}
+html.m .gear-card p {
+  font-size: 10px !important;
+}
+html.m .gear-card .gear-title .icon,
+html.m .vendor-detail .icon:first-child {
+  width: 28px !important;
+  height: 28px !important;
+}
+html.m .vendor-detail h3 {
+  font-size: 15px !important;
+}
+html.m .vendor-upgrades {
+  gap: 6px !important;
+}
+html.m .vendor-upgrade {
+  padding: 6px 8px !important;
+  gap: 8px !important;
+}
+html.m .vendor-upgrade small {
+  font-size: 10px !important;
+}
+html.m-land .vendor-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  align-items: start;
+}
+html.m-land .vendor-list {
+  max-height: calc(100dvh - 150px) !important;
+}
+
+/* ---------- Journal, contracts, guide ---------- */
+html.m .journal-main,
+html.m .side-quests,
+html.m .contract-card,
+html.m .guide-note {
+  padding: 8px !important;
+  gap: 6px !important;
+}
+html.m .journal-main p,
+html.m .contract-card p,
+html.m .guide-note p {
+  font-size: 10px !important;
+}
+html.m .contract-list {
+  gap: 6px !important;
+}
+html.m .contract-side {
+  gap: 6px !important;
+}
+html.m .help-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+  gap: 6px !important;
+}
+html.m .help-grid > * {
+  padding: 8px !important;
+  font-size: 10px !important;
+}
+html.m .journal-stats {
+  gap: 4px !important;
+}
+html.m .journal-stats > span {
+  padding: 6px !important;
+  font-size: 10px !important;
+}
+html.m .lore-list article {
+  padding: 8px !important;
+}
+html.m .lore-list p {
+  font-size: 10px !important;
+}
+
+/* ---------- Pause and settings ---------- */
+html.m .pause-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+html.m .pause-buttons .button.primary {
+  grid-column: 1 / -1;
+}
+html.m .pause-buttons .button {
+  min-height: 42px !important;
+  font-size: 15px !important;
+}
+html.m .control-toggles {
+  gap: 0 !important;
+}
+html.m .control-toggles > * {
+  padding: 8px 0 !important;
+  min-height: 0 !important;
+}
+html.m .control-toggles b,
+html.m .control-toggles strong {
+  font-size: 15px !important;
+}
+html.m .control-toggles small,
+html.m .control-toggles p {
+  font-size: 10px !important;
+}
+@media (pointer: coarse) {
+  /* Key bindings mean nothing on a touch screen. */
+  html.m .key-bindings,
+  html.m .key-bindings + .button,
+  html.m .modal-body .bindings-heading {
+    display: none !important;
+  }
+}
+html.m .modal-intro {
+  font-size: 10px !important;
+  margin-bottom: 8px !important;
+}
+html.m .fine-print {
+  font-size: 10px !important;
+}
+html.m-port .sb-side .skill-detail {
+  top: auto !important;
+  order: 0 !important;
+}
+html.m .detail-perks li {
+  padding: 3px 6px !important;
+  min-height: 0 !important;
+  font-size: 10px !important;
+}
+html.m .detail-perks li b {
+  font-size: 10px !important;
+}
+html.m .detail-perks {
+  gap: 2px !important;
+}
+html.m .skill-node-icon {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  flex: 0 0 48px !important;
+}
+html.m .skill-node-icon > .icon {
+  width: 28px !important;
+  height: 28px !important;
+}
+html.m .skill-node-icon .tile-learn {
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 15px !important;
+  line-height: 18px !important;
+}
+html.m .skill-node-icon kbd {
+  display: none !important;
+}
+html.m .skill-node-text b {
+  font-size: 15px !important;
+}
+html.m .skill-card .skill-short {
+  font-size: 10px !important;
+  margin: 0 !important;
+}
+html.m .skill-costs {
+  gap: 6px !important;
+}
+html.m .skill-costs,
+html.m .skill-costs * {
+  font-size: 10px !important;
+}
+html.m .skill-costs .icon {
+  width: 12px !important;
+  height: 12px !important;
+}
+html.m .skill-ranks i {
+  height: 5px !important;
+  width: 16px !important;
+}
+html.m .skill-ranks {
+  margin: 2px 0 !important;
+}
+html.m .skill-card {
+  display: flex !important;
+  align-items: flex-start !important;
+}
+html.m .skill-card {
+  flex-direction: row !important;
+}
+html.m .skill-card .skill-node-text {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+html.m-port .sb-side {
+  position: relative !important;
+  z-index: 40 !important;
+}
+html.m .sb-center,
+html.m .skill-school {
+  width: auto !important;
+  max-width: none !important;
+}
+html.m .game-shell:has(#modal-root .modal) #toast {
+  top: calc(var(--safe-t) + 52px) !important;
+  bottom: auto !important;
+}
+html.m .skills-intro.sb-head {
+  display: flex !important;
+  align-items: center !important;
+  padding: 4px 8px !important;
+}
+html.m .skills-intro.sb-head > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+html.m .skills-intro.sb-head .sb-crest {
+  width: 32px !important;
+  height: 32px !important;
+}
+html.m .skills-intro.sb-head strong {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 4px !important;
+  padding: 3px 8px !important;
+}
+html.m .skill-card .skill-costs svg.icon,
+html.m .skill-card .skill-costs .icon {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 0 !important;
+}
+html.m .skill-card .skill-costs > * {
+  padding: 1px 4px !important;
+  min-height: 0 !important;
+  line-height: 1.2 !important;
+}
+html.m .detail-perks li b,
+html.m .detail-perks li span {
+  font-size: 10px !important;
+}
+html.m .inv-layout > *,
+html.m .vendor-layout > *,
+html.m .sb2.skill-layout > * {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+html.m .inv-layout > *,
+html.m .sb2.skill-layout > * {
+  align-self: stretch !important;
+}
+html.m .block-backpack {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+html.m .char-sheet {
+  width: 100% !important;
+}
+html.m .vendor-list > * {
+  flex-shrink: 0 !important;
+}
+html.m .vendor-head {
+  display: flex !important;
+}
+html.m .vendor-quest .button {
+  min-height: 34px !important;
+  padding: 4px 10px !important;
+  white-space: nowrap;
+}
+html.m .vendor-quest p,
+html.m .vendor-quest span {
+  font-size: 10px !important;
+}
+html.m-land .vendor-head p {
+  max-width: 60%;
+}
+/* Settings: tidy toggle rows */
+html.m .control-toggles > * {
+  gap: 10px !important;
+}

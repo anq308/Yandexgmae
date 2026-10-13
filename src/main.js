@@ -2869,6 +2869,11 @@ app.addEventListener("click", (e) => {
     return;
   }
   const control = e.target.closest("[data-action]");
+  // Skip the click that follows a touch-down we already handled.
+  if (control && touchFired && touchFired.name === control.dataset.action && performance.now() - touchFired.time < 800) {
+    touchFired = null;
+    return;
+  }
   if (control && !control.disabled) action(control.dataset.action);
 });
 app.addEventListener("input", (e) => {
@@ -2987,7 +2992,8 @@ worldCanvas.addEventListener("pointermove", (e) => {
   game.pointer = worldPoint(e);
 });
 let attackPointer = null,
-  joystickPointer = null;
+  joystickPointer = null,
+  touchFired = null;
 worldCanvas.addEventListener("pointerdown", (e) => {
   audio.unlock();
   if (game.paused) return;
@@ -3064,6 +3070,19 @@ app.addEventListener("pointerdown", (e) => {
     moveJoystick(e, joystick);
     audio.unlock();
     e.preventDefault();
+  }
+  // On touch screens every HUD button fires on touch-down, so dodge, skills and potions
+  // work while the other thumb is still holding the joystick (iOS drops such clicks).
+  const slot =
+    e.pointerType !== "mouse" &&
+    !game.paused &&
+    e.target.closest('#hud .action-slot:not([data-action="attack"]), #interaction-prompt');
+  if (slot && !slot.disabled) {
+    touchFired = { name: slot.dataset.action, time: performance.now() };
+    action(slot.dataset.action);
+    audio.unlock();
+    e.preventDefault();
+    return;
   }
   const attack = e.target.closest('[data-action="attack"]');
   if (attack && !game.paused) {

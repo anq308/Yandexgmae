@@ -361,6 +361,36 @@ test("two fingers can move and attack independently", async ({ browser }) => {
   await context.close();
 });
 
+test("dodge, potion and skills fire on touch while the joystick is held", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  await context.addInitScript(() => {
+    Element.prototype.requestFullscreen = async () => {};
+  });
+  const page = await context.newPage();
+  await begin(page);
+  await page.waitForTimeout(250);
+  const session = await context.newCDPSession(page),
+    j = await page.locator("#joystick").boundingBox(),
+    d = await page.locator("#hud [data-action=dodge]").boundingBox();
+  const joy = { x: j.x + j.width * 0.8, y: j.y + j.height * 0.5, id: 1 },
+    dodge = { x: d.x + d.width / 2, y: d.y + d.height / 2, id: 2 };
+  await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [joy] });
+  await page.waitForTimeout(150);
+  const x0 = await page.evaluate(() => window.__ELDERIA__.game.save.x);
+  await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [joy, dodge] });
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [joy] });
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => ({ cd: window.__ELDERIA__.game.dodgeCooldown, x: window.__ELDERIA__.game.save.x }));
+  expect(after.cd).toBeGreaterThan(1);
+  expect(after.x).toBeGreaterThan(x0);
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await context.close();
+});
+
 test("the farlands patrol awards one weapon and keeps completion after reloading", async ({
   page,
 }) => {
