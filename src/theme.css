@@ -3162,3 +3162,8 @@ input:focus-visible {
 .create-tabs {
   display: none;
 }
+/* The tiled 8×8 stone texture showed seams as a grid on high-DPI phones;
+   panels use a smooth dark fill instead. */
+:root {
+  --stone-texture: linear-gradient(#211a15, #191410);
+}
