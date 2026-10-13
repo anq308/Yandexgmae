@@ -157,7 +157,8 @@ let state = "menu",
   blurred = !document.hasFocus(),
   adPending = false,
   newGameIntent = false;
-let draftName = "";
+let draftName = "",
+  createTab = "class";
 try {
   draftName = sessionStorage.getItem("elderia-draft-name") || "";
 } catch {}
@@ -260,7 +261,8 @@ function showCreation() {
     c,
   );
   screen.innerHTML = `<div class="creation-screen">${titleBar(true)}<div class="creation-heading">${badge(tr("ГЛАВА I · НОВОЕ НАЧАЛО", "CHAPTER I · A NEW BEGINNING"))}<h1>${tr("Каким будет ваш <em>герой?</em>", "Who will your <em>hero be?</em>")}</h1></div>
-  <section class="creation-grid">
+  <nav class="create-tabs">${[["class", tr("Класс", "Class"), "sword"], ["race", tr("Раса", "Race"), "heart"], ["look", tr("Облик", "Look"), "spark"]].map(([id, n, ic]) => `<button class="recipe-chip ${createTab === id ? "active" : ""}" data-action="createTab-${id}" aria-pressed="${createTab === id}">${icon(ic)}${n}</button>`).join("")}</nav>
+  <section class="creation-grid tab-${createTab}">
     <div class="creation-col races-col"><h2 class="col-title">${tr("Раса", "Race")}</h2><div class="race-list">${Object.entries(races)
       .map(
         ([key, r]) =>
@@ -2133,6 +2135,13 @@ async function action(name) {
   }
   if (name === "introDone") {
     finishIntro();
+    return;
+  }
+  if (name.startsWith("createTab-")) {
+    createTab = name.slice(10);
+    const scroll = document.querySelector("#screen")?.scrollTop || 0;
+    showCreation();
+    document.querySelector("#screen").scrollTop = scroll;
     return;
   }
   if (name.startsWith("skillSchool-")) {

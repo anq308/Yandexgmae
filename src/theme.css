@@ -3056,7 +3056,7 @@ input:focus-visible {
 .modal.intro-modal {
   width: 100vw !important;
   max-width: none !important;
-  height: 100vh !important;
+  height: 100dvh !important;
   max-height: none !important;
   background: #000 !important;
   box-shadow: none !important;
@@ -3157,4 +3157,8 @@ input:focus-visible {
   .intro-title { font-size: 15px; }
   .intro-text { font-size: 15px !important; }
   .intro-foot { flex-direction: column; }
+}
+/* Creation tabs exist for phones only. */
+.create-tabs {
+  display: none;
 }
