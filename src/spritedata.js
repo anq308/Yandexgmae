@@ -531,3 +531,85 @@ SPRITES.wolfForm = {
   ],
 };
 export const swap = swapLegs;
+// 2.9: the valley's regular foes, redrawn as outlined pixel sprites.
+const twoLegs = (body, a, b) => [[...body, ...a], [...body, ...b]];
+SPRITES.slime = {
+  palette: { g: "#4aa86a", G: "#7ad890", L: "#c8f8d0", d: "#2a7a4a", e: "#14121a", m: "#1a4a2a" },
+  frames: [
+    ["....GGGGGG....", "..GGLLGGGGGG..", ".GGLLGGGGGGGG.", ".GGGeGGGGeGGG.", "GGGGGGGGGGGGGG", "GGGGGGmmGGGGGG", "gGGGGGGGGGGGGg", ".ggggggggggggg", "..dddddddddd.."],
+    ["..............", "...GGGGGGGG...", ".GGLLLGGGGGGG.", "GGGLGeGGGGeGGG", "GGGGGGGGGGGGGG", "GGGGGGGmmGGGGG", "gGGGGGGGGGGGGg", "gggggggggggggg", ".dddddddddddd."],
+  ],
+};
+SPRITES.enemyWolf = {
+  palette: { ...SPRITES.wolf.palette, g: "#a87a3a", G: "#d0a058", d: "#6a4a20", w: "#f0dcb0", e: "#ff6a3a" },
+  frames: SPRITES.wolf.frames,
+};
+SPRITES.bat = {
+  palette: { b: "#3a2a4a", B: "#5a4a6a", w: "#6a4a7a", e: "#ff5a5a", f: "#f4f4f4" },
+  frames: [
+    ["w..........w", "ww........ww", "wwwB.BB.Bwww", ".wwBBBBBBww.", "..wBeBBeBw..", "...BBffBB...", "....BBBB....", ".....BB....."],
+    ["............", "....BB.BB...", "...BBBBBB...", "wwwBeBBeBwww", "wwwBBffBBwww", "ww..BBBB..ww", "w....BB....w"],
+  ],
+};
+SPRITES.skeleton = {
+  palette: { b: "#e8e2cc", B: "#c8c2ac", d: "#8a8470", e: "#14121a", g: "#7aff9a", w: "#6a4428", s: "#e8e0c0" },
+  frames: twoLegs(
+    ["....bbbbb...w.", "...bbbbbbb..ws", "...bgbbbgb..w.s", "...bbbbbbb.w..s", "....bdbdb..w..s", ".....bbb...w..s", "...bbbbbbbbw.s.", "..b.bdbdb..ws..", "..b.bbbbb..w...", "..b..bdb.......", ".....bbb......."],
+    ["....b...b......", "....b...b......", "....b...b......", "...dd...dd....."],
+    ["...b.....b.....", "...b.....b.....", "...b.....b.....", "..dd.....dd...."],
+  ),
+};
+SPRITES.bandit = {
+  palette: { h: "#4a3a2a", H: "#6a5038", k: "#d8a878", e: "#14121a", c: "#6a2a24", C: "#8a3a30", l: "#5a4a3a", b: "#3a2a1a", s: "#c8d0d4", S: "#f0f4f4", y: "#c9a24a" },
+  frames: twoLegs(
+    ["....hhhhhh.....", "...hHHHHHHh....", "...hHkkkkHh....", "...hkekkekh....", "...hkkkkkkh....", "....cccccc.....", "..ccCCCCCCcc.S.", "..cCCCCCCCCc.S.", "..k.CCyyCC.k.S.", "..k.lllllll.kS.", "....llllll..yy.", "....ll..ll.....", "....ll..ll....."],
+    ["....bb..bb.....", "...bbb..bbb...."],
+    ["...bb....bb....", "..bbb....bbb..."],
+  ),
+};
+SPRITES.spider = {
+  palette: { s: "#4a3a5a", S: "#6a5a7a", L: "#8a7a9a", e: "#ff5a5a", p: "#9ad04a", d: "#2a1a3a" },
+  frames: [
+    ["d.....SSSSS.....d", ".d...SLLSSSS...d.", "..d.SLSSSSSSS.d..", "dd.dSSSSSSSSSd.dd", "..dSSSpSSSpSSSd..", ".d.dSSSSSSSSSd.d.", "d...SSeSSSeSS...d", ".....SSSSSSS.....", "....d.d...d.d....", "...d..d...d..d..."],
+    [".d....SSSSS....d.", "d....SLLSSSS....d", ".dd.SLSSSSSSS.dd.", "...dSSSSSSSSSd...", "ddSSSSpSSSpSSSSdd", "...dSSSSSSSSSd...", ".dd.SSeSSSeSS.dd.", "d....SSSSSSS....d", "....d.d...d.d....", "..d...d...d...d.."],
+  ],
+};
+SPRITES.shaman = {
+  palette: { r: "#5a2a4a", R: "#7a3a6a", L: "#9a5a8a", m: "#e8e2cc", e: "#ff5aff", w: "#6a4428", o: "#d9a0e9", O: "#ffffff", t: "#c9a24a" },
+  frames: twoLegs(
+    ["....rrrrrr...oo", "...rRRRRRRr.oOo", "...rmmmmmmr..o.", "...rmemmemr..w.", "...rmmmmmmr..w.", "....mtmtmm...w.", "..rrRRRRRRrr.w.", "..rRRLRRLRRRrw.", ".rRRRRtRRRRRRw.", ".rRRRRtRRRRRR..", ".rRRRRRRRRRRR..", "..rRRRRRRRRr..."],
+    ["...rr....rr...."],
+    ["....rr..rr....."],
+  ),
+};
+SPRITES.revenant = {
+  palette: { a: "#5a6470", A: "#8a949c", L: "#b8c4c8", g: "#7a8a72", e: "#7affe0", c: "#3a2a4a", s: "#c8d0d4", S: "#e8f0f0", d: "#2a2a34" },
+  frames: twoLegs(
+    ["....AAAAAA......", "...ALLLLLLA.....", "...AaeaaeaA.....", "...AaaaaaaA.....", "....aaaaaa....S.", "..AAAAAAAAAA..S.", ".AALLAAAALLAA.S.", ".Aa.AcccccA.aAS.", ".g..AcccccA..gs.", "....AAAAAAA...s.", "....cccccccc....", "....aa...aa....."],
+    ["....aa...aa.....", "...ddd...ddd...."],
+    ["...aa.....aa....", "..ddd.....ddd..."],
+  ),
+};
+SPRITES.golem = {
+  palette: { s: "#7a7a84", S: "#9a9aa4", L: "#c0c0c8", d: "#4a4a54", c: "#7ac8ff", m: "#5a8a3a" },
+  frames: twoLegs(
+    [".....SSSSSS.....", "....SLLSSSSS....", "....ScSSSScS....", "....SSSSSSSS....", "..SSSSSSSSSSSS..", ".SLLSSSSSSSSLLS.", "SSSSmSSSSSSmSSSS", "SSd.SSSSSSSS.dSS", "SS..SSSddSSS..SS", "dd..SSSSSSSS..dd", "....SSS..SSS...."],
+    ["....SSS..SSS....", "....ddd..ddd...."],
+    ["...SSS....SSS...", "...ddd....ddd..."],
+  ),
+};
+SPRITES.wisp = {
+  palette: { o: "#7ad8ff", O: "#c8f0ff", W: "#ffffff", e: "#1a3a6a", t: "#4aa8e8" },
+  frames: [
+    ["....OOO....", "..OOWWWOO..", ".OWWWWWWWO.", ".OWeWWWeWO.", "OOWWWWWWWOO", ".OOWWWWWOO.", "..oOOOOOo..", "...ooooo...", "....tot....", ".....t.....", "....t......"],
+    ["....OOO....", "..OOWWWOO..", ".OWWWWWWWO.", ".OWeWWWeWO.", "OOWWWWWWWOO", ".OOWWWWWOO.", "..oOOOOOo..", "...ooooo...", "....tot....", "......t....", ".......t..."],
+  ],
+};
+SPRITES.sentinel = {
+  palette: { s: "#8a8478", S: "#b0a890", L: "#d8d0b8", g: "#5a8a6a", c: "#ffb040", w: "#6a4428", b: "#e8e0c0" },
+  frames: twoLegs(
+    ["....SSSSSS....w.", "...SLLLLLLS...wb", "...SSccccSS..w.b", "...SSSSSSSS..w..", "....SSSSSS..w...", "..SSSSSSSSSSw....", ".SLSgSSSSgSLwb...", ".SS.SSSSSS.Sw.b..", ".SS.SSggSS..w..b.", "....SSSSSS...w...", "....SS..SS......."],
+    ["....SS..SS......", "...sss..sss....."],
+    ["...SS....SS.....", "..sss....sss...."],
+  ),
+};

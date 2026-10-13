@@ -1955,7 +1955,7 @@ export function drawEnemy(c, e, time) {
     r(c, x + 3, y - 20 + b, 2, 3, "#eef7df");
   }
   drawStatus(c, e, time, ["guardian", "titan"].includes(type) ? 69 : 43);
-  if (e.windup > 0) {
+  if (e.windup > 0 && e.boss) {
     c.strokeStyle = "#e7a071";
     c.lineWidth = 1;
     c.beginPath();

@@ -39,6 +39,16 @@ import { drawNova, drawDecal, drawBeam, drawOrbit, drawTornado, drawBossCast, dr
 import { installSkillMechanics } from "./skillmech.js";
 import { installClassKit, drawThrown, drawCorpse, drawFormBeast } from "./classkit.js";
 import { addBiomeSpawns, biomeSpecial, drawBiomeEnemy } from "./bestiary.js";
+import { drawEnemyTelegraph } from "./fx.js";
+// How each foe's blow looks: fangs, claws, heavy slams or a blade.
+const enemyStrikeStyle = (e, large) =>
+  large || ["golem", "yeti", "treantling", "sandGolem", "titan"].includes(e.type)
+    ? "heavy"
+    : ["wolf", "boar", "ghoul"].includes(e.type)
+      ? "bite"
+      : ["spider", "crab", "scorpion", "bat", "toad", "slime"].includes(e.type)
+        ? "claw"
+        : "blade";
 import { expandedEnemyStats, updateBoss, addHazard } from "./battle.js";
 import { elementMultiplier } from "./climate.js";
 import {
@@ -132,7 +142,9 @@ export class Game {
   }
   resize() {
     const bounds = this.canvas.getBoundingClientRect();
-    this.scale = bounds.width < 600 ? 1.65 : 2;
+    // Small screens zoom out a little so the hero sees enough of the world.
+    const small = Math.min(bounds.width, bounds.height);
+    this.scale = small < 440 ? Math.max(1.4, Math.min(1.75, small / 235)) : bounds.width < 600 ? 1.65 : 2;
     this.canvas.width = Math.round(bounds.width / this.scale);
     this.canvas.height = Math.round(bounds.height / this.scale);
     this.c.imageSmoothingEnabled = false;
@@ -1536,6 +1548,7 @@ export class Game {
         }
       }
       if (e.hp <= 0) continue;
+      if (e.strike > 0) e.strike -= dt;
       const dist = Math.hypot(s.x - e.x, s.y - e.y);
       if (Math.abs(s.x - e.x) > 4) e.face = s.x < e.x ? -1 : 1;
       if (e.boss) {
@@ -1623,15 +1636,23 @@ export class Game {
               if (e.type === "spider" || e.element === "poison") this.buffs.poison = 4;
               if (e.rootOnHit) this.buffs.chilled = 1.4;
             }
+            // A visible strike: the foe lunges and its blow sweeps the air in front of it.
+            const strikeAngle = Math.atan2((e.aimY ?? s.y) - e.y, (e.aimX ?? s.x) - e.x);
+            e.strike = 0.22;
+            e.strikeAngle = strikeAngle;
             this.effects.push({
               x: e.x,
               y: e.y,
-              type: "burst",
-              radius: large ? 95 : 26,
-              color: "#de9a7e",
-              life: 0.35,
-              maxLife: 0.35,
+              type: "slash",
+              style: enemyStrikeStyle(e, large),
+              radius: large ? 96 : 40,
+              life: 0.3,
+              maxLife: 0.3,
+              angle: strikeAngle,
+              color: e.element === "poison" ? "#9ad04a" : e.element === "ice" ? "#9ad8ff" : "#ff7a5a",
+              arc: large ? 1.4 : 0.9,
             });
+            if (Math.hypot(s.x - e.x, s.y - e.y) < (large ? 96 : 30)) hitBurst(this, { type: "hero", x: s.x, y: s.y }, e, false, false);
             if (e.type === "guardian" && e.hp < e.maxHp * 0.45)
               for (let n = 0; n < 6; n++) {
                 const a = (n * Math.PI) / 3 + this.time;
@@ -1659,6 +1680,7 @@ export class Game {
         lineOfSight(this.world, e, s)
       ) {
         e.windup = large ? 0.9 : ranged ? 0.65 : 0.45;
+        e.windupMax = e.windup;
         e.aimX = s.x;
         e.aimY = s.y;
       } else if ((dist < this.climate.aggro || e.alert > 0) && dist > (ranged ? 115 : 20)) {
@@ -2111,13 +2133,16 @@ export class Game {
         }
         const flash = o.hitFlash > 0 && c.filter !== undefined;
         if (flash) c.filter = "brightness(2.4) saturate(0.4)";
-        if (o.lift) {
+        // Telegraph under the foe while it winds up an attack.
+        if (o.windup > 0 && !o.boss) drawEnemyTelegraph(c, o, this.time);
+        if (o.lift || o.strike > 0) {
           c.save();
-          c.translate(0, -o.lift);
+          c.translate(o.strike > 0 ? Math.cos(o.strikeAngle) * 5 : 0, -(o.lift || 0));
         }
-        if (!drawWorldBoss(c, o, this.time) && !drawAdvancedEnemy(c, o, this.time) && !drawBiomeEnemy(c, o, this.time))
+        // Sprites first; bosses fall through to their hand-drawn art.
+        if (!drawBiomeEnemy(c, o, this.time) && !drawWorldBoss(c, o, this.time) && !drawAdvancedEnemy(c, o, this.time))
           drawEnemy(c, o, this.time);
-        if (o.lift) c.restore();
+        if (o.lift || o.strike > 0) c.restore();
         if (flash) c.filter = "none";
         if (!o.boss) {
           const ly = o.y - 48,
@@ -2155,7 +2180,7 @@ export class Game {
     for (const e of this.effects) {
       if (e.type === "death") {
         drawDeath(c, e, this.time, (ctx, m, t) => {
-          if (!drawWorldBoss(ctx, m, t) && !drawAdvancedEnemy(ctx, m, t) && !drawBiomeEnemy(ctx, m, t))
+          if (!drawBiomeEnemy(ctx, m, t) && !drawWorldBoss(ctx, m, t) && !drawAdvancedEnemy(ctx, m, t))
             drawEnemy(ctx, m, t);
         });
         continue;

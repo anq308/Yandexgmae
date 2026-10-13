@@ -45,6 +45,14 @@ export function drawProjectile(c, p, time) {
     return;
   }
   if (style === "arrow") {
+    if (p.enemy) {
+      // Hostile arrows glow red and leave a streak so they can be dodged.
+      c.scale(1.5, 1.5);
+      glow(c, 0, 0, 10, "#ff6a4a", 0.45);
+      c.globalAlpha = 0.5;
+      R(c, -26, -1, 16, 2, "#ff9a7a");
+      c.globalAlpha = 1;
+    }
     R(c, -12, -0.5, 14, 1, p.enemy ? "#8a5a3a" : "#c8a070");
     c.fillStyle = p.enemy ? "#d0704a" : "#e8f0f0";
     c.beginPath();

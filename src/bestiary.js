@@ -1,5 +1,6 @@
 import { TILE, WIDTH, HEIGHT, point, canWalk, regionAt, enemySpawns, landmarks } from "./world.js";
 import { drawSprite } from "./sprites.js";
+import { drawStatus } from "./art.js";
 import { SPRITES } from "./spritedata.js";
 // Biome creatures: each land gets its own wildlife and outlaws, with their own tricks.
 export const biomeEnemyStats = {
@@ -132,7 +133,42 @@ const shadowOf = (c, x, y, w) => {
   c.ellipse(x, y + 2, w, 4, 0, 0, Math.PI * 2);
   c.fill();
 };
+// Regular foes drawn from pixel sprites (bosses keep their hand-drawn art).
+const commonSprites = { slime: "slime", wolf: "enemyWolf", bat: "bat", skeleton: "skeleton", bandit: "bandit", spider: "spider", shaman: "shaman", revenant: "revenant", golem: "golem", wisp: "wisp", sentinel: "sentinel" };
+export function drawCommonEnemy(c, e, time) {
+  const key = commonSprites[e.type];
+  if (!key || e.boss) return false;
+  const sp = SPRITES[key],
+    windup = e.windup > 0,
+    flying = e.type === "bat" || e.type === "wisp",
+    frame = Math.floor(time * (flying ? 10 : 6) + e.x * 0.03) % 2,
+    lift = flying ? -10 + Math.sin(time * 5 + e.x) * 3 : 0;
+  if (flying) {
+    c.fillStyle = "#00000033";
+    c.beginPath();
+    c.ellipse(e.x, e.y + 2, 9, 3, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  if (e.type === "wisp") {
+    const g = c.createRadialGradient(e.x, e.y - 24 + lift, 2, e.x, e.y - 24 + lift, 26);
+    g.addColorStop(0, "#c8f0ff88");
+    g.addColorStop(1, "#7ad8ff00");
+    c.fillStyle = g;
+    c.fillRect(e.x - 26, e.y - 50 + lift, 52, 52);
+  }
+  drawSprite(c, key, sp.frames, sp.palette, e.x + (windup ? Math.sin(time * 60) : 0), e.y, {
+    scale: 2,
+    flip: (e.face || 1) < 0,
+    frame,
+    lift,
+    shadow: !flying,
+    tint: windup ? "brightness(1.4)" : e.elite ? "saturate(1.3) contrast(1.1)" : undefined,
+  });
+  drawStatus(c, e, time, 46);
+  return true;
+}
 export function drawBiomeEnemy(c, e, time) {
+  if (drawCommonEnemy(c, e, time)) return true;
   if (!biomeEnemyStats[e.type]) return false;
   const { x, y } = e;
   if (e.type === "sandGolem" && e.hidden) {
@@ -159,5 +195,6 @@ export function drawBiomeEnemy(c, e, time) {
     tint: windup ? "brightness(1.35)" : e.charge ? "saturate(1.4)" : undefined,
   });
   if (e.charge) for (let i = 0; i < 3; i++) r(c, x - (e.face || 1) * (22 + i * 7), y - 8 + i * 3, 5, 2, "#d8c09a");
+  drawStatus(c, e, time, e.type === "yeti" ? 52 : 46);
   return true;
 }

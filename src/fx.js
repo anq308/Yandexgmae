@@ -627,3 +627,64 @@ export function drawDodge(c, e, time) {
   }
   c.restore();
 }
+
+// Where a regular foe is about to strike: a red wedge filling up, a ring for big brutes,
+// a glowing aim line for archers and casters.
+export function drawEnemyTelegraph(c, e, time) {
+  const total = e.windupMax || 0.45,
+    k = Math.max(0, Math.min(1, 1 - e.windup / total)),
+    a = Math.atan2((e.aimY ?? e.y) - e.y, (e.aimX ?? e.x) - e.x),
+    large = ["guardian", "titan"].includes(e.type) || e.large,
+    ranged = ["sentinel", "wisp", "skeleton", "shaman"].includes(e.type) || e.rangedAttack;
+  c.save();
+  if (ranged) {
+    const len = Math.hypot((e.aimX ?? e.x) - e.x, (e.aimY ?? e.y) - e.y);
+    c.translate(e.x, e.y - 10);
+    c.rotate(a);
+    c.globalAlpha = 0.25 + k * 0.5;
+    c.strokeStyle = "#ff6a4a";
+    c.lineWidth = 1 + k * 3;
+    c.setLineDash([6, 4]);
+    c.lineDashOffset = -time * 40;
+    c.beginPath();
+    c.moveTo(10, 0);
+    c.lineTo(len, 0);
+    c.stroke();
+    c.setLineDash([]);
+    const gr = c.createRadialGradient(8, 0, 0, 8, 0, 6 + k * 8);
+    gr.addColorStop(0, "#fff0c0");
+    gr.addColorStop(1, "#ff6a4a00");
+    c.fillStyle = gr;
+    c.beginPath();
+    c.arc(8, 0, 6 + k * 8, 0, Math.PI * 2);
+    c.fill();
+  } else if (large) {
+    c.translate(e.x, e.y);
+    c.scale(1, 0.6);
+    c.fillStyle = `rgba(255,80,60,${0.12 + k * 0.18})`;
+    c.beginPath();
+    c.arc(0, 0, 96, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = `rgba(255,120,80,${0.25 + k * 0.25})`;
+    c.beginPath();
+    c.arc(0, 0, 96 * k, 0, Math.PI * 2);
+    c.fill();
+  } else {
+    const R = 40,
+      span = 0.75;
+    c.translate(e.x, e.y - 6);
+    c.fillStyle = "rgba(255,80,60,0.18)";
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.arc(0, 0, R, a - span, a + span);
+    c.closePath();
+    c.fill();
+    c.fillStyle = `rgba(255,110,70,${0.3 + k * 0.4})`;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.arc(0, 0, R * k, a - span, a + span);
+    c.closePath();
+    c.fill();
+  }
+  c.restore();
+}

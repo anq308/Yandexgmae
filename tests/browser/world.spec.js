@@ -178,3 +178,47 @@ test("forge-only gear cannot be bought, even cheaply", async ({ page }) => {
   });
   expect(r).toEqual([false, false, 99999]);
 });
+
+test("the opening chronicle tells the story and the map lists campfires beside it", async ({ page }) => {
+  await begin(page, "monk");
+  await page.evaluate(() => window.__ELDERIA__.action("intro"));
+  await expect(page.locator(".intro-text")).toContainText("Эльдерия");
+  for (let i = 0; i < 5; i++) await page.locator('[data-action="introNext"]').click();
+  await expect(page.locator(".intro-text")).toContainText("Оливера");
+  await page.locator('[data-action="introDone"]').first().click();
+  expect(await page.evaluate(() => window.__ELDERIA__.game.save.flags.introSeen)).toBe(true);
+  await page.evaluate(() => {
+    window.__ELDERIA__.game.save.visitedCamps.push("camp2");
+    window.__ELDERIA__.action("map");
+  });
+  await expect(page.locator(".map-main .map-camps")).toBeVisible();
+  await expect(page.locator('[data-action="travel-camp2"]')).toBeEnabled();
+});
+
+test("each descent is reshaped and foes telegraph and show their strikes", async ({ page }) => {
+  await begin(page, "warrior");
+  const r = await page.evaluate(async () => {
+    const { createDungeon } = await import("/src/dungeons.js");
+    const { makeEnemy } = await import("/src/battle.js");
+    const shape = (w) => Array.from(w.tiles.slice(0, 256 * 48)).join("");
+    const a = createDungeon({ id: "crypt", floor: 1, tier: 0, runId: 1 }),
+      b = createDungeon({ id: "crypt", floor: 1, tier: 0, runId: 2 }),
+      m = createDungeon({ id: "mine", floor: 1, tier: 0, runId: 1 });
+    const g = window.__ELDERIA__.game,
+      s = g.save,
+      camp = g.world.objects.find((o) => o.id === "camp2");
+    Object.assign(s, { x: camp.x + 60, y: camp.y + 140 });
+    const e = makeEnemy({ id: "striker", type: "wolf", x: s.x + 20, y: s.y }, undefined, 1);
+    g.enemies = [e];
+    g.invincible = 99;
+    let telegraphed = false,
+      struck = false;
+    for (let i = 0; i < 40; i++) {
+      g.update(0.05);
+      if (e.windup > 0 && e.windupMax) telegraphed = true;
+      if (g.effects.some((x) => x.type === "slash" && x.style === "bite")) struck = true;
+    }
+    return { runsDiffer: shape(a) !== shape(b), themesDiffer: shape(a) !== shape(m), telegraphed, struck };
+  });
+  expect(r).toEqual({ runsDiffer: true, themesDiffer: true, telegraphed: true, struck: true });
+});

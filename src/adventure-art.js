@@ -1165,7 +1165,7 @@ export function drawAdvancedEnemy(c, e, time) {
     c.ellipse(x, y - 26, 33, 46, 0, 0, Math.PI * 2);
     c.stroke();
   }
-  if (e.windup > 0) {
+  if (e.windup > 0 && e.boss) {
     line(
       c,
       [

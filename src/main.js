@@ -34,6 +34,7 @@ import "@fontsource/tiny5/400.css";
 import "@fontsource/press-start-2p/400.css";
 import "./style.css";
 import "./theme.css";
+import "./mobile.css";
 import {
   tr,
   classes,
@@ -56,6 +57,7 @@ import {
   elementNames,
 } from "./equipment.js";
 import { shardCount, heralds } from "./eclipse.js";
+import { introPages, drawIntroScene, resetIntroScene, loreEntries } from "./intro.js";
 import { storyOf, scenes, sceneOpen, sceneChoices, choiceTag, sceneText, fateLines, storyLog, storyRumors, villagerMood } from "./story.js";
 import { worldBosses } from "./worldbosses.js";
 import { races } from "./races.js";
@@ -91,6 +93,20 @@ import {
 } from "./quests.js";
 
 const app = document.querySelector("#app");
+// Phones and small tablets get their own layout (see mobile.css).
+function syncDevice() {
+  const w = innerWidth,
+    h = innerHeight,
+    coarse = matchMedia("(pointer: coarse)").matches,
+    m = coarse ? Math.min(w, h) <= 820 : Math.min(w, h) <= 500 || w <= 600,
+    root = document.documentElement;
+  root.classList.toggle("m", m);
+  root.classList.toggle("m-land", m && w > h);
+  root.classList.toggle("m-port", m && w <= h);
+}
+syncDevice();
+addEventListener("resize", syncDevice);
+addEventListener("orientationchange", () => setTimeout(syncDevice, 120));
 app.innerHTML = `<main class="game-shell"><canvas id="world" aria-label="${tr("Игровой мир", "Game world")}"></canvas><div class="world-shade"></div><div id="screen"></div><div id="hud" hidden></div><div id="modal-root"></div><div id="toast" role="status"></div><div class="background-pause" hidden>${icon("pause")}<span></span></div></main>`;
 const platform = new Platform(),
   audio = new GameAudio(),
@@ -183,7 +199,7 @@ function showMenu() {
   const hero = existingSave
     ? { characterClass: existingSave.characterClass, appearance: existingSave.appearance, race: existingSave.race, weapon: existingSave.equippedWeapon || existingSave.ownedWeapons[0], armor: existingSave.equippedArmor === "none" ? "chain" : existingSave.equippedArmor }
     : { characterClass: "warrior", weapon: "sword", armor: "chain" };
-  screen.innerHTML = `<div class="title-screen"><canvas id="title-scene" aria-hidden="true"></canvas><div class="title-corner"><button class="icon-button" data-action="sound" aria-label="${tr("Включить или отключить звук", "Toggle audio")}">${icon(audio.enabled ? "sound" : "mute")}</button><button class="language-button" data-action="language">${language.toUpperCase()}</button></div><div class="title-ui"><div class="title-logo">${icon("crystal")}<div class="logo-word">${tr("ЭЛЬДЕРИЯ", "ELDERIA")}</div><div class="logo-sub">${tr("ХРОНИКИ ЗАБЫТОЙ ДОЛИНЫ", "CHRONICLES OF THE FORGOTTEN VALLEY")}</div></div><h1 class="title-tagline">${tr("В каждой долине есть своя <em>легенда.</em>", "Every valley holds a <em>legend.</em>")}</h1><nav class="title-menu">${existingSave ? btn(tr("Продолжить путешествие", "Continue adventure"), "continue", "primary", "play") : btn(tr("Начать путешествие", "Begin your adventure"), "create", "primary", "arrow")}${existingSave ? btn(tr("Новый герой", "New hero"), "create", "secondary", "plus") : ""}${btn(tr("Справочник путешественника", "Traveler’s guide"), "help", "secondary", "book")}</nav>${existingSave ? `<div class="save-caption">${escapeHTML(existingSave.name)} · ${label((races[existingSave.race] || races.human).name)} · ${label(classes[existingSave.characterClass].name)} · ${tr("Уровень", "Level")} ${existingSave.level}</div>` : ""}</div><footer class="title-footer"><span>${tr("Пиксельная action RPG", "A pixel action RPG")} · ${Object.keys(classes).length} ${tr("классов", "classes")} · ${Object.keys(races).length} ${tr("рас", "races")}</span><span>v2.8 · ${tr("Сохранения включены", "Autosave enabled")}</span></footer></div>`;
+  screen.innerHTML = `<div class="title-screen"><canvas id="title-scene" aria-hidden="true"></canvas><div class="title-corner"><button class="icon-button" data-action="sound" aria-label="${tr("Включить или отключить звук", "Toggle audio")}">${icon(audio.enabled ? "sound" : "mute")}</button><button class="language-button" data-action="language">${language.toUpperCase()}</button></div><div class="title-ui"><div class="title-logo">${icon("crystal")}<div class="logo-word">${tr("ЭЛЬДЕРИЯ", "ELDERIA")}</div><div class="logo-sub">${tr("ХРОНИКИ ЗАБЫТОЙ ДОЛИНЫ", "CHRONICLES OF THE FORGOTTEN VALLEY")}</div></div><h1 class="title-tagline">${tr("В каждой долине есть своя <em>легенда.</em>", "Every valley holds a <em>legend.</em>")}</h1><nav class="title-menu">${existingSave ? btn(tr("Продолжить путешествие", "Continue adventure"), "continue", "primary", "play") : btn(tr("Начать путешествие", "Begin your adventure"), "create", "primary", "arrow")}${existingSave ? btn(tr("Новый герой", "New hero"), "create", "secondary", "plus") : ""}${btn(tr("Справочник путешественника", "Traveler’s guide"), "help", "secondary", "book")}</nav>${existingSave ? `<div class="save-caption">${escapeHTML(existingSave.name)} · ${label((races[existingSave.race] || races.human).name)} · ${label(classes[existingSave.characterClass].name)} · ${tr("Уровень", "Level")} ${existingSave.level}</div>` : ""}</div><footer class="title-footer"><span>${tr("Пиксельная action RPG", "A pixel action RPG")} · ${Object.keys(classes).length} ${tr("классов", "classes")} · ${Object.keys(races).length} ${tr("рас", "races")}</span><span>v2.9 · ${tr("Сохранения включены", "Autosave enabled")}</span></footer></div>`;
   runScene("title-scene", (canvas, t) => drawTitleScene(canvas, t, hero));
 }
 // Character creation: race column, animated hero at a campfire, class column.
@@ -293,7 +309,7 @@ function renderHUD() {
     })
     .join(
       "",
-    )}<button class="action-slot" data-action="dodge">${icon("boot")}<span>${tr("Рывок", "Dodge")}</span><kbd>SHIFT</kbd><b id="dodge-countdown"></b></button><i class="slot-divider"></i><button class="action-slot potion-slot" data-action="potion">${icon("potion")}<span>${tr("Зелье", "Potion")}</span><kbd>R</kbd><b id="potion-count"></b><i class="potion-countdown" id="potion-countdown"></i></button><button class="action-slot interact-slot" data-action="interact">${icon("leaf")}<span>${tr("Действие", "Interact")}</span><kbd>E</kbd></button><div class="hud-globe mana"><div class="globe-frame"><i class="globe-fill" id="mana-globe"></i><i class="globe-shine"></i></div><span id="mana-globe-text"></span></div></div><div class="interaction-prompt" id="interaction-prompt" hidden></div><div class="movement-tip" id="movement-tip"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>${tr("Движение", "Move")}</span><i></i><span>${tr("Нажмите на тропу, чтобы идти", "Click a trail to walk")}</span><button data-action="dismissTip" aria-label="${tr("Скрыть подсказку", "Hide hint")}">×</button></div><div class="touch-joystick" id="joystick"><div class="joystick-knob"></div></div>`;
+    )}<button class="action-slot" data-action="dodge">${icon("boot")}<span>${tr("Рывок", "Dodge")}</span><kbd>SHIFT</kbd><b id="dodge-countdown"></b></button><i class="slot-divider"></i><button class="action-slot potion-slot" data-action="potion">${icon("potion")}<span>${tr("Зелье", "Potion")}</span><kbd>R</kbd><b id="potion-count"></b><i class="potion-countdown" id="potion-countdown"></i></button><button class="action-slot interact-slot" data-action="interact">${icon("leaf")}<span>${tr("Действие", "Interact")}</span><kbd>E</kbd></button><div class="hud-globe mana"><div class="globe-frame"><i class="globe-fill" id="mana-globe"></i><i class="globe-shine"></i></div><span id="mana-globe-text"></span></div></div><div class="interaction-prompt" id="interaction-prompt" data-action="interact" role="button" hidden></div><div class="movement-tip" id="movement-tip"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>${tr("Движение", "Move")}</span><i></i><span>${tr("Нажмите на тропу, чтобы идти", "Click a trail to walk")}</span><button data-action="dismissTip" aria-label="${tr("Скрыть подсказку", "Hide hint")}">×</button></div><div class="touch-joystick" id="joystick"><div class="joystick-knob"></div></div>`;
   const ctx = document.querySelector("#hud-avatar").getContext("2d");
   ctx.imageSmoothingEnabled = false;
   drawHero(ctx, 26, 50, s.characterClass, {
@@ -514,6 +530,11 @@ function startGame(save) {
   renderHUD();
   syncPause();
   if (save.hp <= 0) showDeath();
+  // A brand-new hero first hears the chronicle of the valley (automated test browsers skip it).
+  else if (save.playtime < 1 && !save.flags.introSeen && !navigator.webdriver) {
+    resetIntroScene();
+    showIntro(0);
+  }
   else if (save.playtime < 1)
     toast(
       tr(
@@ -521,6 +542,44 @@ function startGame(save) {
         "Your weapon is in hand. Speak to Elder Oliver by the campfire — he is waiting.",
       ),
     );
+}
+// ---------- The opening chronicle ----------
+let introFrame = null,
+  introPage = 0;
+function showIntro(page = 0) {
+  const pages = introPages();
+  introPage = page;
+  const p = pages[page];
+  openModal(
+    p.title,
+    `<div class="intro"><div class="intro-frame"><canvas id="intro-scene" width="320" height="180"></canvas><span class="intro-chapter">${tr("ГЛАВА", "CHAPTER")} ${["I", "II", "III", "IV", "V", "VI"][page]}</span></div><div class="intro-caption"><h3 class="intro-title">${p.title}</h3><p class="intro-text" data-full="${escapeHTML(p.text)}"></p></div><div class="intro-foot"><div class="intro-dots">${pages.map((_, i) => `<i class="${i === page ? "on" : i < page ? "seen" : ""}"></i>`).join("")}</div><div class="dialog-actions">${btn(tr("Пропустить", "Skip"), "introDone", "secondary")}${page < pages.length - 1 ? btn(tr("Далее", "Next"), "introNext", "primary", "arrow") : btn(tr("Начать путь", "Begin the journey"), "introDone", "primary", "flag")}</div></div></div>`,
+    "intro-modal",
+    tr("ХРОНИКИ ЗАБЫТОЙ ДОЛИНЫ", "CHRONICLES OF THE FORGOTTEN VALLEY"),
+  );
+  cancelAnimationFrame(introFrame);
+  const canvas = document.querySelector("#intro-scene"),
+    text = document.querySelector(".intro-text"),
+    full = p.text,
+    started = performance.now(),
+    loop = () => {
+      if (!document.body.contains(canvas)) return;
+      const t = (performance.now() - started) / 1000;
+      drawIntroScene(canvas, page, t);
+      // The chronicle writes itself after the picture fades in.
+      const shown = Math.max(0, Math.floor((t - 0.6) * 45));
+      if (text.textContent.length < full.length) text.textContent = full.slice(0, shown);
+      introFrame = requestAnimationFrame(loop);
+    };
+  // A click on the scene finishes the line at once.
+  canvas.addEventListener("click", () => (text.textContent = full));
+  loop();
+}
+function finishIntro() {
+  cancelAnimationFrame(introFrame);
+  if (game.save) game.save.flags.introSeen = true;
+  game.persist();
+  closeModal();
+  toast(tr("Найдите старосту Оливера у костра Лиственной деревни.", "Find Elder Oliver by the Leafhaven campfire."));
 }
 function openModal(title, body, kind = "standard", subtitle = "") {
   const scroll = modal === kind ? modalRoot.querySelector(".modal-body")?.scrollTop || 0 : 0;
@@ -768,6 +827,7 @@ function showJournal() {
     tabs = [
       ["story", tr("Сюжет", "Story"), "book"],
       ["fates", tr("Решения", "Choices"), "flag"],
+      ["lore", tr("Летопись", "Chronicle"), "book"],
       ["people", tr("Жители", "Villagers"), "home"],
       ["bosses", tr("Боссы и подземелья", "Bosses & dungeons"), "skull"],
       ["stats", tr("Итоги", "Records"), "crown"],
@@ -782,6 +842,7 @@ function showJournal() {
     fates = fateLines(s),
     lean = st.dawn - st.dusk;
   const body = {
+    lore: `<div class="lore-list">${loreEntries().map(([t, x]) => `<article><h3>${t}</h3><p>${x}</p></article>`).join("")}</div>${btn(tr("Пересмотреть вступление", "Replay the opening"), "intro", "secondary", "book")}`,
     fates: `<div class="story-balance"><span>${icon("sun")}${tr("Рассвет", "Dawn")} <b>${st.dawn}</b></span><div class="balance-bar"><i style="left:${Math.max(4, Math.min(96, 50 - lean * 6))}%"></i></div><span><b>${st.dusk}</b> ${tr("Сумерки", "Dusk")}${icon("moon")}</span></div><p class="fine-print">${lean > 1 ? tr("Знак на ладони светится золотом. Свет ведёт вас.", "The Mark glows gold. Light guides you.") : lean < -1 ? tr("Знак на ладони подёрнут серым пеплом. Тьма ближе, чем кажется.", "The Mark is veiled in grey ash. Darkness is closer than it seems.") : tr("Знак мерцает — вы ещё не выбрали сторону.", "The Mark flickers — you have not yet chosen a side.")} ${tr("Доверие Оливера", "Oliver's trust")}: <b>${st.trust > 0 ? "+" : ""}${st.trust}</b></p>${fates.length ? `<h3 class="small-heading">${tr("СУДЬБЫ", "FATES")}</h3><ul class="fate-list">${fates.map((f) => `<li>${escapeHTML(f)}</li>`).join("")}</ul>` : ""}<h3 class="small-heading">${tr("ВАШИ РЕШЕНИЯ", "YOUR DECISIONS")}</h3>${log.length ? `<ol class="decision-log">${log.map((e) => `<li>${escapeHTML(e)}</li>`).join("")}</ol>` : `<p class="fine-print">${tr("Вы ещё не приняли ни одного решения. Каждый ответ в разговорах меняет историю.", "You haven't made any decisions yet. Every answer in a conversation changes the story.")}</p>`}`,
     story: `<div class="journal-main"><span class="quest-type">${tr("ОСНОВНАЯ ИСТОРИЯ", "MAIN STORY")} · ${chapterLabel(s.quest)}</span><h3>${q.title}</h3><p>${q.desc}</p>${q.steps.map(([name, have, need]) => `<div class="journal-step ${have >= need ? "done" : ""}">${icon(have >= need ? "check" : "flag")}<span>${name}</span><b>${Math.min(have, need)} / ${need}</b></div>`).join("")}${btn(tr("Посмотреть на карте", "Show on map"), "map", "secondary", "map")}</div><div class="chapter-line">${[0, 3, 7, 8, 11].map((n, i) => `<span class="${s.quest >= n ? "reached" : ""}">${["I", "II", "III", "IV", "★"][i]}</span>`).join("<i></i>")}</div>`,
     people: `<div class="side-quests">${side.map(([ic, title, done, text]) => `<div class="${done ? "done" : ""}">${icon(ic)}<span><strong>${title}</strong><small>${text}</small></span>${done ? icon("check") : ""}</div>`).join("")}</div>${btn(tr("Доска поручений", "Contract board"), "contracts", "secondary", "flag")}`,
@@ -1274,7 +1335,14 @@ function drawMap(canvas, large) {
   const { width, height } = mapDimensions(),
     mw = width * TILE * sx,
     mh = height * TILE * sy;
-  c.drawImage(overworld ? worldOverview(game.world, game.season || "spring") : game.terrain.overview, 0, 0, mw, mh);
+  if (overworld) c.drawImage(worldOverview(game.world, game.season || "spring"), 0, 0, mw, mh);
+  else {
+    // Dungeons and rooms only use the top-left part of the tile grid: crop the overview to it.
+    const img = game.terrain.overview,
+      fw = game.world.width || WIDTH,
+      fh = game.world.height || HEIGHT;
+    c.drawImage(img, 0, 0, (img.width * width) / fw, (img.height * height) / fh, 0, 0, mw, mh);
+  }
   if (overworld) c.drawImage(fogOverlay(discovered), 0, 0, mw, mh);
   else
     for (const o of game.world.objects)
@@ -1372,7 +1440,7 @@ function showMap() {
     game.save.activeDungeon
       ? label(dungeons[game.save.activeDungeon.id].name)
       : tr("Карта забытой долины", "Map of the forgotten valley"),
-    `<div class="map-controls"><span>${width} × ${height} ${tr("клеток", "tiles")}</span><div><button class="icon-button" data-action="mapZoomOut" aria-label="${tr("Уменьшить карту", "Zoom out")}">${icon("minus")}</button><b id="map-zoom-value">100%</b><button class="icon-button" data-action="mapZoomIn" aria-label="${tr("Увеличить карту", "Zoom in")}">${icon("plus")}</button><button class="icon-button" data-action="mapCenter" aria-label="${tr("Найти героя", "Find your hero")}">${icon("target")}</button></div></div><div class="map-wrap"><canvas id="large-map" width="864" height="648"></canvas><span class="map-north">N<br>↑</span></div><div class="map-route"><span id="map-marker-label"></span><div class="gear-actions"><button class="button primary" data-action="mapTravel" id="map-travel" hidden>${icon("sun")}${tr("Переместиться к костру", "Travel to campfire")}</button>${btn(tr("Идти к отметке", "Walk to marker"), "mapWalk", "secondary", "flag")}</div></div><div class="map-camps" ${game.save.activeDungeon ? "hidden" : ""}><span>${tr("БЫСТРОЕ ПЕРЕМЕЩЕНИЕ · НАЖМИТЕ НА КОСТЁР НА КАРТЕ ИЛИ НИЖЕ", "FAST TRAVEL · CLICK A CAMPFIRE ON THE MAP OR BELOW")}</span><div>${landmarks
+    `<div class="map-controls"><span>${width} × ${height} ${tr("клеток", "tiles")}</span><div><button class="icon-button" data-action="mapZoomOut" aria-label="${tr("Уменьшить карту", "Zoom out")}">${icon("minus")}</button><b id="map-zoom-value">100%</b><button class="icon-button" data-action="mapZoomIn" aria-label="${tr("Увеличить карту", "Zoom in")}">${icon("plus")}</button><button class="icon-button" data-action="mapCenter" aria-label="${tr("Найти героя", "Find your hero")}">${icon("target")}</button></div></div><div class="map-main"><div class="map-wrap"><canvas id="large-map" width="864" height="648"></canvas><span class="map-north">N<br>↑</span></div><div class="map-route"><span id="map-marker-label"></span><div class="gear-actions"><button class="button primary" data-action="mapTravel" id="map-travel" hidden>${icon("sun")}${tr("Переместиться к костру", "Travel to campfire")}</button>${btn(tr("Идти к отметке", "Walk to marker"), "mapWalk", "secondary", "flag")}</div></div><div class="map-camps" ${game.save.activeDungeon ? "hidden" : ""}><span>${icon("sun")}${tr("БЫСТРОЕ ПЕРЕМЕЩЕНИЕ", "FAST TRAVEL")}<small>${tr("Костры открываются, когда вы подходите к ним", "Campfires unlock when you walk up to them")}</small></span><div>${landmarks
       .filter((o) => o.type === "camp" && !game.save.activeDungeon)
       .map(
         (camp) =>
@@ -1380,7 +1448,7 @@ function showMap() {
       )
       .join(
         "",
-      )}</div></div><div class="map-legend">${[["arrow", tr("Ваш герой", "Your hero")], ["flag", tr("Цель задания", "Objective")], ["target", tr("Ваша отметка", "Your marker")], ["skull", tr("Подземелье", "Dungeon")], ["sun", tr("Костёр", "Campfire")], ["crown", tr("Мировой босс", "World boss")], ["fish", tr("Рыбалка", "Fishing")], ["book", tr("Ваш наставник", "Your mentor")]].map(([i, t]) => `<span>${icon(i)}${t}</span>`).join("")}<span class="fog-key"></span>${tr("Неисследованные земли", "Unexplored lands")}</div>`,
+      )}</div></div></div><div class="map-legend">${[["arrow", tr("Ваш герой", "Your hero")], ["flag", tr("Цель задания", "Objective")], ["target", tr("Ваша отметка", "Your marker")], ["skull", tr("Подземелье", "Dungeon")], ["sun", tr("Костёр", "Campfire")], ["crown", tr("Мировой босс", "World boss")], ["fish", tr("Рыбалка", "Fishing")], ["book", tr("Ваш наставник", "Your mentor")]].map(([i, t]) => `<span>${icon(i)}${t}</span>`).join("")}<span class="fog-key"></span>${tr("Неисследованные земли", "Unexplored lands")}</div>`,
     "world-map",
   );
   drawMap(document.querySelector("#large-map"), true);
@@ -2021,6 +2089,19 @@ function spendGold(amount, fn) {
 async function action(name) {
   if (name.startsWith("sc-")) {
     runSceneChoice(name);
+    return;
+  }
+  if (name === "intro") {
+    resetIntroScene();
+    showIntro(0);
+    return;
+  }
+  if (name === "introNext") {
+    showIntro(Math.min(introPages().length - 1, introPage + 1));
+    return;
+  }
+  if (name === "introDone") {
+    finishIntro();
     return;
   }
   if (name.startsWith("skillSchool-")) {

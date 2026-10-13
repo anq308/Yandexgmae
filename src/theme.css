@@ -2899,3 +2899,262 @@ input:focus-visible {
   justify-items: start !important;
   text-align: left !important;
 }
+
+/* ---------- 2.9: map with fast travel beside it ---------- */
+.world-map {
+  width: min(100%, 1240px) !important;
+}
+.map-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 12px;
+  align-items: start;
+}
+.map-main .map-camps {
+  margin: 0 !important;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(#2a2119, #1a1511);
+  box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 2px #5b4527;
+}
+.map-main .map-camps > span {
+  display: grid;
+  gap: 4px;
+  font-size: 15px;
+  color: var(--gold-light);
+}
+.map-main .map-camps > span small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.map-main .map-camps > div {
+  display: grid !important;
+  gap: 6px;
+  max-height: 560px;
+  overflow: auto;
+}
+.map-main .camp-travel {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  font-size: 15px;
+  text-align: left;
+}
+.map-main .camp-travel.unlocked {
+  color: var(--gold-light);
+  box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 1px var(--gold);
+}
+@media (max-width: 900px) {
+  .map-main {
+    grid-template-columns: 1fr;
+  }
+}
+.map-main > .map-wrap,
+.map-main > .map-route {
+  grid-column: 1;
+}
+.map-main > .map-camps {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+@media (max-width: 900px) {
+  .map-main > .map-camps {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+/* ---------- 2.9: bigger, brighter small text ---------- */
+.skill-short,
+.skill-detail > p,
+.detail-perks li,
+.detail-costs,
+.sb-head span,
+.sb-bar-title small,
+.mastery-grid p,
+.skill-layout .skill-card .skill-costs,
+.skill-layout .skill-card .cost-level,
+.detail-slots small,
+.detail-reason,
+.detail-max,
+.skill-detail small {
+  font-size: 15px !important;
+  line-height: 1.35 !important;
+}
+.skill-short {
+  color: #e8dcc0 !important;
+}
+.sb2 .skill-card.unlearned .skill-short {
+  color: #c0b498 !important;
+}
+.sb-tab-text small {
+  font-size: 15px !important;
+  color: #d8c8a8 !important;
+}
+.sb-school-tab {
+  color: #e8dcc0 !important;
+}
+.detail-perks li {
+  color: #d8ccb0 !important;
+}
+.skill-layout .skill-card.unlearned .skill-node-text > b {
+  color: #e0d4b8 !important;
+}
+/* HUD readability: quest tracker, dungeon status, buffs and location. */
+.quest-tracker #quest-steps,
+.quest-tracker #quest-steps *,
+.quest-direction,
+.quest-direction *,
+.dungeon-status,
+.dungeon-status *,
+.buff-display,
+.location-badge span,
+.weather-badge,
+.enemy-focus,
+.enemy-focus * {
+  font-size: 15px !important;
+}
+.dungeon-status b,
+.dungeon-status strong {
+  font-size: 20px !important;
+}
+.quest-tracker #quest-steps {
+  color: #efe4c8 !important;
+}
+
+/* ---------- 2.9: opening chronicle and lore ---------- */
+.lore-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.lore-list article {
+  padding: 10px 12px;
+  background: linear-gradient(#26201a, #1a1511);
+  box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 1px #3a2c1c;
+}
+.lore-list h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: var(--gold-light);
+}
+.lore-list p {
+  margin: 0;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  color: #e8dcc0 !important;
+}
+
+/* ---------- 2.9: cinematic opening ---------- */
+.modal-backdrop:has(.intro-modal) {
+  background: #000 !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+}
+.modal.intro-modal {
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100vh !important;
+  max-height: none !important;
+  background: #000 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  animation: intro-in 0.6s ease-out;
+}
+.modal.intro-modal .modal-header {
+  display: none;
+}
+.modal.intro-modal .modal-body {
+  height: 100%;
+  overflow: hidden;
+  padding: 0 !important;
+}
+@keyframes intro-in {
+  from { opacity: 0; }
+}
+.intro {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  justify-items: center;
+  align-items: center;
+  gap: 2vh;
+  padding: 3vh 16px 3vh;
+  box-sizing: border-box;
+}
+.intro-frame {
+  position: relative;
+  width: min(100%, calc(62vh * 320 / 180));
+  aspect-ratio: 320 / 180;
+}
+.intro-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  cursor: pointer;
+  box-shadow: 0 0 60px rgba(255, 200, 120, 0.08);
+}
+.intro-chapter {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  font: 10px "Press Start 2P", monospace;
+  letter-spacing: 3px;
+  color: rgba(255, 236, 190, 0.75);
+  text-shadow: 0 2px 0 #000;
+}
+.intro-caption {
+  width: min(100%, calc(62vh * 320 / 180));
+  text-align: center;
+}
+.intro-title {
+  margin: 0 0 1.2vh;
+  font: 20px "Press Start 2P", monospace;
+  color: var(--gold-light);
+  letter-spacing: 2px;
+  text-shadow: 0 3px 0 #000, 0 0 18px rgba(255, 200, 100, 0.35);
+}
+.intro-text {
+  margin: 0 auto;
+  max-width: 900px;
+  min-height: 3.2em;
+  font-size: 20px !important;
+  line-height: 1.6 !important;
+  color: #ece2c8 !important;
+}
+.intro-foot {
+  width: min(100%, calc(62vh * 320 / 180));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.intro-foot .dialog-actions {
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.intro-dots {
+  display: flex;
+  gap: 8px;
+}
+.intro-dots i {
+  width: 22px;
+  height: 4px;
+  background: #2a2420;
+}
+.intro-dots i.seen {
+  background: #7a6440;
+}
+.intro-dots i.on {
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(255, 210, 120, 0.6);
+}
+@media (max-width: 700px) {
+  .intro-title { font-size: 15px; }
+  .intro-text { font-size: 15px !important; }
+  .intro-foot { flex-direction: column; }
+}
