@@ -106,6 +106,37 @@ function syncDevice() {
 }
 syncDevice();
 addEventListener("resize", syncDevice);
+// iOS Safari ignores user-scalable=no: two thumbs (joystick + attack) or quick taps
+// read as pinch / double-tap zoom. Block those gestures outside scrollable windows
+// and snap the page back if it still ends up zoomed.
+const scrollable = (t) => t instanceof Element && t.closest("#modal-root, #screen, input, select, textarea");
+for (const type of ["gesturestart", "gesturechange", "gestureend"])
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+document.addEventListener(
+  "touchmove",
+  (e) => {
+    if (e.touches.length > 1 || !scrollable(e.target)) e.preventDefault();
+  },
+  { passive: false },
+);
+let lastTouchEnd = 0;
+document.addEventListener(
+  "touchend",
+  (e) => {
+    const now = performance.now();
+    if (now - lastTouchEnd < 350 && !scrollable(e.target)) e.preventDefault();
+    lastTouchEnd = now;
+  },
+  { passive: false },
+);
+const viewportMeta = document.querySelector('meta[name="viewport"]');
+function resetZoom() {
+  if (!viewportMeta || !window.visualViewport || visualViewport.scale <= 1.01) return;
+  const content = viewportMeta.content;
+  viewportMeta.content = content.replace("maximum-scale=1.0", "maximum-scale=1.01");
+  requestAnimationFrame(() => (viewportMeta.content = content));
+}
+window.visualViewport?.addEventListener("resize", resetZoom);
 addEventListener("orientationchange", () => setTimeout(syncDevice, 120));
 app.innerHTML = `<main class="game-shell"><canvas id="world" aria-label="${tr("Игровой мир", "Game world")}"></canvas><div class="world-shade"></div><div id="screen"></div><div id="hud" hidden></div><div id="modal-root"></div><div id="toast" role="status"></div><div class="background-pause" hidden>${icon("pause")}<span></span></div></main>`;
 const platform = new Platform(),

@@ -1688,3 +1688,31 @@ html.m-land .vendor-head p {
 html.m .control-toggles > * {
   gap: 10px !important;
 }
+
+/* No browser gestures on the playfield and HUD: they belong to the game. */
+html.m #world,
+html.m #hud,
+html.m .game-shell {
+  touch-action: none !important;
+}
+html.m #modal-root,
+html.m #screen {
+  touch-action: manipulation;
+}
+html.m .modal-body,
+html.m .vendor-list,
+html.m .sb-side,
+html.m .map-camps > div {
+  touch-action: pan-x pan-y !important;
+}
+html.m #large-map {
+  touch-action: none !important;
+}
+/* Swiping that starts on a button or card inside a window must still scroll it. */
+html.m #modal-root button,
+html.m #modal-root canvas:not(#large-map),
+html.m #modal-root article,
+html.m #screen button,
+html.m #screen canvas {
+  touch-action: pan-x pan-y !important;
+}
